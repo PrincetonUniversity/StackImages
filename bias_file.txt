@@ -1,0 +1,1 @@
+/Users/rvdb/personal/SharpCap/darks/ZWO ASI2400MC Pro/RAW16@6072x4042/2/30.0s/gain_300/dark_20_frames_-20.0C_2022-01-31T20_40_38.fits

@@ -1,0 +1,4 @@
+conda config --add channels astropy
+conda create -n BobsAstro astropy astroquery scipy matplotlib wxpython opencv gala
+conda activate BobsAstro
+conda update -n base conda
