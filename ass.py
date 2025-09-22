@@ -23,7 +23,7 @@ Here are the functions defined herein...
     ChangeCursor(event):
     UpdateStatusBar(event):
     align(image_stack, method):
-    align1star(image_stack):
+    align_click_star(image_stack):
     onclick(event):
     get_aligned_images():
     get_fwhms():
@@ -151,8 +151,6 @@ from matplotlib.backends.backend_wxagg import (
     FigureCanvasWxAgg as FigureCanvas,
     NavigationToolbar2WxAgg as NavigationToolbar)
 matplotlib.use('Qt5Agg')
-
-
 import PIL
 
 global showAlign, FileNames
@@ -165,6 +163,8 @@ global L_idx
 global current_fwhm
 global nstacked
 global plotter, images_frame
+global xpos
+xpos = 640
 
 plotter = ''
 images_frame = ''
@@ -182,14 +182,14 @@ objname = ''
 global image_type
 image_type = '2D'
 
+global dt
+
 global GUI, slash
 GUI = False
 slash = '/'
 print('OS = '+platform.system())
 if (platform.system() == 'Windows'): slash = '\\'
 else:                                slash = '/'
-
-
 
 xmin=0
 xmax=0
@@ -246,8 +246,6 @@ class Plot(wx.Panel):
         sizer.Add(self.canvas, 1, wx.EXPAND)
         sizer.Add(self.toolbar, 0, wx.LEFT | wx.EXPAND)
         self.SetSizer(sizer)
-
-
 class PlotNotebook(wx.Panel):
     def __init__(self, parent, id=-1):
         super().__init__(parent, id=id)
@@ -296,10 +294,6 @@ def color_weights(R, G, B, border=70, help=False):
     g_flux = sum(Gflux[0:nfluxes])
     b_flux = sum(Bflux[0:nfluxes])
 
-
-
-
-
     if ( (r_flux > 0) & (g_flux > 0) & (b_flux > 0) ): 
         numerator = (r_flux * g_flux * b_flux)**(1/3)
         r_wt = numerator/r_flux
@@ -325,8 +319,6 @@ def color_weights_old(R, G, B, border=20, help=False):
     eps = 1e-5
     
     border = np.max([-xmin, xmax, -ymin, ymax])+20
-
-
     (m,n) = G.shape
 
     xs = arange(0,n)
@@ -389,8 +381,6 @@ def color_weights_old(R, G, B, border=20, help=False):
 
 ######################################################################################
 ## Stack images
-
-
 # from here:  https://krstn.eu/np.nanpercentile()-there-has-to-be-a-faster-way/
 def _zvalue_from_index(arr, ind):
     """private helper function to work around the limitation of np.choose() by employing np.take()
@@ -442,8 +432,6 @@ def nan_percentile(arr, q):
         # linear interpolation (like numpy percentile) takes the fractional part of desired position
         floor_val = _zvalue_from_index(arr=arr_sort, ind=f_arr) * (c_arr - k_arr)
         ceil_val = _zvalue_from_index(arr=arr_sort, ind=c_arr) * (k_arr - f_arr)
-
-
         quant_arr = floor_val + ceil_val
         quant_arr[fc_equal_k_mask] = _zvalue_from_index(arr=arr_sort, ind=k_arr.astype(np.int32))[fc_equal_k_mask]  # if floor == ceiling take floor value
 
@@ -454,8 +442,6 @@ def nan_percentile(arr, q):
 def stack(image_stack, outlier_thresh=1.5, help=False):
     global ybar0, xbar0
     global gauge, ntot, nstacked
-
-
     if (help != False):
         print('\nFunction stack parameters: \n', \
                 '  images:  the set of images to be stacked into a single image (Required) \n', \
@@ -1711,8 +1697,6 @@ def autoalign(images, numstars=1, thresh=0.1, border=0, \
         idx = argmax(Arect1[r2:m-r2,r2:n-r2])
         ii = r2 + int(idx/(n-2*r2))
         jj = r2 + idx%(n-2*r2)
-
-
         '''
 #       Arect1pile = zeros((box_size0,box_size0,9), dtype=float32)
 #       for ii in arange(-1,2):
@@ -2340,8 +2324,6 @@ def show_stacked_image():
     close(1)
 #   print(tab,'calling slidershow')
     fig = slidershow(maximum(65535*RGB/np.max(RGB),0), folder=folder, fname=name+'-py-'+suffix+'.png')
-
-
 global frame
 
 def ChangeCursor(event):
@@ -2356,15 +2338,12 @@ def UpdateStatusBar(event):
     if event.inaxes:
         fig_frame.statusBar.SetStatusText("x={}  y={}".format(event.xdata, event.ydata))
 
-def align(image_stack, method):
-    align1star(image_stack)
-#   CanvasFrame()
-
-def align1star(image_stack):
+def align_click_stars(image_stack):
     global xbar, ybar, xbar0, ybar0, xbar1, ybar1, stack_size, stack_num, star, \
         images, align_stack, img, cid
     global i0, i1, j0, j1, m1, n1, Xs, Ys, alphas, thetas
     global xpos
+    global im
 
     global fig_frame
     '''
@@ -2398,11 +2377,15 @@ def align1star(image_stack):
 
     img = float32(array(align_stack[stack_num]))
     img0 = minimum(img,  percentile(img,99.9))
-    img0 = maximum(img0, percentile(img0, 0.01))
-    fig_frame.axes.imshow(img, cmap='gray', norm=LogNorm())
-#   fig_frame.axes.imshow(img, cmap='gray', norm=LogNorm())
-#   fig_frame.axes.imshow(arcsinh(img), cmap='gray')
-    show()
+    img0 = maximum(img0, percentile(img0[img0>0], 0.01))
+    img0 = img0/np.max(img0)
+
+    fig_frame.figure.set_facecolor('black')
+    im = fig_frame.axes.imshow(img0, cmap='gray', norm=LogNorm())
+    im.set_array(img0)
+    fig_frame.figure.canvas.draw()
+    fig_frame.Show()
+    
 
     fig_frame.figure_canvas = FigureCanvas(fig_frame, -1, fig_frame.figure)
 
@@ -2487,10 +2470,6 @@ def onclick(event):
         xbar1[L_idx[stack_num-stack_size]] = Xs[j,i]
         ybar1[L_idx[stack_num-stack_size]] = Ys[j,i]
 
-
-
-
-
     done = False
     stack_num += 1
     if (stack_num < stack_size):
@@ -2505,14 +2484,9 @@ def onclick(event):
     if (stack_num < stack_size):
             img = float32(array(align_stack[L_idx[stack_num]]))
             img0 = minimum(img,  percentile(img,99.9))
-            img0 = maximum(img0, percentile(img0, 0.01))
+            img0 = maximum(img0, percentile(img0[img0>0], 0.01))
+            img0 = img0/np.max(img0)
     
-            fig_frame.figure.set_facecolor('black')
-            if (stack_num == 1):
-                im = fig_frame.axes.imshow(img0, cmap='gray', norm=LogNorm())
-#               fig_frame.axes.imshow(img, cmap='gray', norm=LogNorm())
-#               fig_frame.axes.imshow(arcsinh(img), cmap='gray')
-                show()
     
 #           print('stack_num = ', stack_num, ', stack_size = ', stack_size, ', len(fnames) = ', len(fnames))
 #           print('(stack_num)%stack_size = ', (stack_num)%stack_size)
@@ -2530,11 +2504,8 @@ def onclick(event):
             fig_frame.figure.text(0.55, 0.95, 'star', ha='center', \
                             va='bottom', size='medium',color='white')
             fig_frame.Show()
-            if (stack_num == 1):
-                fig_frame.figure.canvas.draw()
-            else:
-                im.set_array(img0)
-                fig_frame.figure.canvas.draw()
+            im.set_array(img0)
+            fig_frame.figure.canvas.draw()
             image = wx.Image(script_dir+'png'+slash+'pointer_cyan.png')
             image.SetOption(wx.IMAGE_OPTION_CUR_HOTSPOT_X, 16)
             image.SetOption(wx.IMAGE_OPTION_CUR_HOTSPOT_Y, 16)
@@ -2552,15 +2523,9 @@ def onclick(event):
         if (stack_num < 2*stack_size):
             img = float32(array(align_stack[L_idx[stack_num-stack_size]]))
             img0 = minimum(img,  percentile(img,99.9))
-            img0 = maximum(img0, percentile(img0, 0.01))
+            img0 = maximum(img0, percentile(img0[img0>0], 0.01))
+            img0 = img0/np.max(img0)
 
-#           fig_frame.figure.set_facecolor('black')
-#           fig_frame.axes.imshow(img0, cmap='gray', norm=LogNorm())
-#           fig_frame.axes.imshow(img, cmap='gray', norm=LogNorm())
-#           fig_frame.axes.imshow(arcsinh(img), cmap='gray')
-#           show()
-
-#       print('stack_num = ', stack_num, ', fname = ', fnames[stack_num-stack_size%len(fnames)])
             thename = fnames[(stack_num-stack_size-1)%len(fnames)]
             if (len(thename)> 23):  thename = thename[0:10]+'...'+thename[-10:-1]+thename[-1]
             fig_frame.figure.text(0.2, 0.95, thename, ha='center', va='bottom', size='medium',color='black')
@@ -2601,8 +2566,6 @@ def onclick(event):
         image.SetOption(wx.IMAGE_OPTION_CUR_HOTSPOT_Y, 16)
         fig_frame.figure_canvas.SetCursor(wx.Cursor(image))  # THE BEST
         show()
-
-
         stacking = False
         (N,m,n) = align_stack.shape
         xmin = int( -ceil(-np.min(xbar0-xbar0[0])))-1
@@ -2627,8 +2590,6 @@ def onclick(event):
         ys = array([arange(0,m-ymin+ymax)]).T
         Xs = ones((m1,1))*xs
         Ys = ys*ones((1,n1))
-
-
         if (align_method == 'click on 2 stars'):
             dist0 = sqrt((xbar1[0]-xbar0[0])**2+(ybar1[0]-ybar0[0])**2)
             theta0 = arctan2(ybar1[0]-ybar0[0],xbar1[0]-xbar0[0])
@@ -2753,15 +2714,13 @@ def onmouse(event):
                             fwhm(A,i,j))
                     if (lbl9 != ''):
                         lbl9.SetLabel('')
+                        txt9 =       ' Background:  Avg.: {avg:<7.1f}   Std.Dev.: {stddev:<7.1f} '
+                        txt9 = txt9+ 'Median: {median:<7.1f}       IQR: {iqr:<7.1f}'
+                        lbl9.SetLabel( txt9.format(avg=bkg_avg,stddev=bkg_std,median=bkg_median,iqr=bkg_iqr))
 
-                        txt9 = ' Star info:  Centroid: ({x:<7.2f}, {y:<7.2f})  Max Val: {max_val:<7.0f}  Flux: {flux:<7.0f}'
-                        txt9 = txt9+ \
-                             '\n            Background:  Avg.: {avg:<7.1f}   Std.Dev.: {stddev:<7.1f} '
-                        txt9 = txt9+ \
-                             '\n                              Median: {median:<7.1f}            IQR: {iqr:<7.1f}'
-
-                        lbl9.SetLabel( txt9.format(x=xbar,y=ybar,max_val=maxval,flux=flux, \
-                                                avg=bkg_avg,stddev=bkg_std,median=bkg_median,iqr=bkg_iqr))
+                        if (lbl11 != ''): lbl11.SetLabel('') 
+                        txt11 = ' Star Info:  Centroid: ({x:<7.2f}, {y:<7.2f})  Max Val: {max_val:<7.0f}  Flux: {flux:<7.0f}'
+                        lbl11.SetLabel( txt11.format(x=xbar,y=ybar,max_val=maxval,flux=flux ))
                     i_prev = i
                     j_prev = j
     elif (len(A.shape) == 3):
@@ -2859,15 +2818,17 @@ def onmouse(event):
                         i_prev = i
                         j_prev = j
 
-                        if (lbl11 != ''): lbl11.SetLabel('') 
                         txt11 = ' Star info:  Centroid: ({xbar:<7.2f}, {ybar:<7.2f})  ' \
                                + 'FWHM: {fwhm:<5.2} ' \
                                + 'Fluxes: R={red_flux:<7.2e}, G={green_flux:<7.2e}, B={blue_flux:<7.2e}, Total={total_flux:<7.2e} '
-                        lbl11.SetLabel( txt11.format(xbar=xbar,ybar=ybar,fwhm=fwhm_here,red_flux=Rflux,green_flux=Gflux,blue_flux=Bflux,total_flux=Lflux ))
+                        if (lbl11 != ''): 
+                            lbl11.SetLabel('') 
+                            lbl11.SetLabel( txt11.format(xbar=xbar,ybar=ybar,fwhm=fwhm_here,red_flux=Rflux,green_flux=Gflux,blue_flux=Bflux,total_flux=Lflux ))
                 else:
-                    if (lbl9 != ''): lbl9.SetLabel('') 
                     txt9 = ' Pixel info:  (x,y) = ({x:<5.0f}, {y:<5.0f}),  Red: {red_val:<7.5f}   Green: {green_val:<7.5f}   Blue: {blue_val:<7.5f} '
-                    lbl9.SetLabel( txt9.format(x=j,y=i,red_val=A[i,j,0]/Amax,green_val=A[i,j,1]/Amax,blue_val=A[i,j,2]/Amax \
+                    if (lbl9 != ''): 
+                        lbl9.SetLabel('') 
+                        lbl9.SetLabel( txt9.format(x=j,y=i,red_val=A[i,j,0]/Amax,green_val=A[i,j,1]/Amax,blue_val=A[i,j,2]/Amax \
                                                 ))
 
 global scolsat, sgamma, smini, smaxi, A, B, C, h, maxi, mini, gamma, colsat, axsave, bsave, axname, bname
@@ -3774,8 +3735,6 @@ def weighted_percentile(values, weights, p):
         it.iternext()
 
     return values_sorted[pctile_index]
-
-
 '''
 def makeHRdiag_new(*arg):
     if len(arg) > 6: 
@@ -3928,8 +3887,6 @@ def makeHRdiag_new(RGB, objname='', minmag0=10, shape='rect', shape_params=20, \
 
 # k, LconvL2 = findstars_new(L,thresh)
     k, LconvL2 = findstars(L,thresh,fignum=0)
-
-
 # an alternative method.   works good (2,2,3 is also good)
 # an alternative method.   works good (3,3,4 is also good)
     r0 = 2.5
@@ -4102,8 +4059,6 @@ def makeHRdiag_new(RGB, objname='', minmag0=10, shape='rect', shape_params=20, \
     fluxmag  = fluxmag[0:N]
     rgb      = rgb[0:N, 0:4]
     marksize = marksize[0:N]
-
-
     global plotter, fig5, fig6, fig5axes, fig6axes
     global images_frame
 
@@ -4194,11 +4149,7 @@ def makeHRdiag_new(RGB, objname='', minmag0=10, shape='rect', shape_params=20, \
 #       gca().invert_yaxis()
     
     text_file.close()
-
-
     return 
-
-
 def makeHRdiagRRlyrae(*arg):
     if len(arg) > 8: 
         thresh       = arg[8]; 
@@ -4247,8 +4198,6 @@ def makeHRdiagRRlyrae(*arg):
     (m,n) = L.shape
 
     k, LconvL2 = findstars(L, fignum=0)
-
-
 # an alternative method.   works okay
     r0 = 3
     r1 = 3
@@ -4266,8 +4215,6 @@ def makeHRdiagRRlyrae(*arg):
     L2convL2 = convolve2d(L2, averager, mode='same')
     R2convL2 = convolve2d(R2, averager, mode='same')
     B2convL2 = convolve2d(B2, averager, mode='same')
-
-
 
     '''
     Laplacian2 = array([[ 0., -1., -1., -1.,  0.], \
@@ -4915,8 +4862,6 @@ def makeHRdiagRRlyraeN(RGBs, objname, minmag0, fluxthresh, colorthresh, showit, 
     Gs = RGBs[:,:,:,1]
     Bs = RGBs[:,:,:,2]
     Ls = (Rs+Gs+Bs)/3
-
-
     (N,m,n) = Ls.shape
 
     L = median(Ls, axis=0)
@@ -4925,8 +4870,6 @@ def makeHRdiagRRlyraeN(RGBs, objname, minmag0, fluxthresh, colorthresh, showit, 
     B = median(Bs, axis=0)
 
     k, LconvL2 = findstars(L, fignum=0)
-
-
 # an alternative method.   works okay
     r0 = 3
     r1 = 3
@@ -4943,8 +4886,6 @@ def makeHRdiagRRlyraeN(RGBs, objname, minmag0, fluxthresh, colorthresh, showit, 
     GconvL2 = convolve2d(G, averager, mode='same')
     BconvL2 = convolve2d(B, averager, mode='same')
     
-
-
     '''
     Laplacian2 = array([[ 0., -1., -1., -1.,  0.], \
                         [-1.,  0.,  2.,  0., -1.], \
@@ -5019,8 +4960,6 @@ def makeHRdiagRRlyraeN(RGBs, objname, minmag0, fluxthresh, colorthresh, showit, 
     for j in arange(0,N):
         maxLsfluxmag = np.max(Lsfluxmag[j,:]);        
         Lsfluxmag[j] = Lsfluxmag[j]-maxLsfluxmag - minmag0;
-
-
     Lfluxmag  = -Lfluxmag;                        
     Lsfluxmag = -Lsfluxmag;                        
 
@@ -5614,6 +5553,7 @@ def ImageSmoothCore(I,thresh_pctl,r,medmean):
     return I
 
 def applyFlat(I, flat, bias=0):
+    print(tab,'Applying flat')
     if len(bias.shape) == 0: 
         if bias == 0:
             bias = percentile(I, 1)
@@ -5621,6 +5561,7 @@ def applyFlat(I, flat, bias=0):
     flat = maximum(flat, percentile(flat,0.1))  # ignore dead pixels
 
     scale = median(flat-bias)
+    print('scale = ', scale)
 
     if len(I.shape) == 2:
         I = bias + scale*(I-bias)/(flat-bias+1e-10)
@@ -5628,8 +5569,13 @@ def applyFlat(I, flat, bias=0):
         N = I.shape[0]
         meanbias = mean(bias)
         print(tab,'Applying flat to ',N,' images')
+        print(tab,'min/max of bias = ', np.min(bias), np.max(bias))
+        print(tab,'min/max of flat = ', np.min(flat), np.max(flat))
+        print(tab,'min/max of I[0,:,:] = ', np.min(I[0,:,:]), np.max(I[0,:,:]))
         for j in arange(0,N):
             I[j,:,:] = meanbias + scale*(I[j,:,:]-bias)/(flat-bias+1e-10)
+#           I[j,:,:] = meanbias + I[j,:,:]/flat
+#           I[j,:,:] = meanbias + (I[j,:,:]-5*bias)/(flat)
 
 def RemoveGradient(I):
     global xmin, xmax, ymin, ymax
@@ -5995,8 +5941,6 @@ def pad(img, rad):
     return padded
     '''
     return np.pad(img, rad, mode='edge')
-
-
 def RLdeconv(L, fwhm_target, psf, thresh=0.1, x=0, y=0, std_dev=5, \
                 psf_shape='default', rad=6, show_psf='False'):
     global tab
@@ -6215,8 +6159,6 @@ def fits_astrometry(file_location, approx_ra_dec=[0,0], approx_fov=0.5, \
     crval1=318.603943485
     crval2=46.2853651935
     '''
-
-
     
 #   hdul[0].header.clear()
 #   hdul[0].header['BITPIX'] = -32  
@@ -6514,8 +6456,6 @@ def astrometry(image, approx_ra_dec=[0,0], approx_fov=0.5, \
                 angle = 180*arcsin(crossprod)/pi  # angular separation in degrees
                 if ((dotprod<=0) | (angle>approx_fov)): continue  
             j = j+1
-
-
     N = j
     NN = N
     ra  =  ra[:N]
@@ -6914,8 +6854,6 @@ def getRaDec(obj):
                 return ra,dec
     print(tab,'Not found: ', obj); return 0,0
 
-
-
 #####################################################################################
 # Functions that used to be part of StackImages.py
 
@@ -7266,6 +7204,11 @@ def get_images(evt):
                     (m, n, three) = images2[j].shape
                 else:
                     (m, n) = images2[j].shape
+                    tmp = zeros((m,n,3), dtype='float32')
+                    tmp[:,:,0] = images2[j]+0.001
+                    tmp[:,:,1] = images2[j]+0.001
+                    tmp[:,:,2] = images2[j]+0.001
+                    images2[j] = tmp
                 if (m < minm): minm = m
                 if (n < minn): minn = n
 
@@ -7308,8 +7251,6 @@ def get_images(evt):
                 for j in range(0,nNonFit):           images[jj]  = images2[j][  0:minm,0:minn,:].sum(axis=2); L_idx[jj] = -1; jj=jj+1
 
         images  = array(images)
-
-
         nR += nRGB + nNonFit
         nG += nRGB + nNonFit
         nB += nRGB + nNonFit
@@ -7514,6 +7455,10 @@ def align_stack_show(evt):
 
     if ((shape(bias)[0] == 0)):
         bias = percentile(images[0,:,:],0.1)* ones(shape(images[0,:,:]))
+
+    print('shape(images) = ', shape(images))
+    print('shape(bias) = ', shape(bias))
+    print('shape(flat) = ', shape(flat))
     if ((shape(bias)[0] > 0) & (shape(flat)[0] > 0)):
         if ( (shape(bias) == shape(images[0,:,:])) & 
              (shape(flat) == shape(images[0,:,:])) ):
@@ -7587,7 +7532,7 @@ def align_stack_show(evt):
     if   ((char0=='1') | (char0=='2') | (char0=='3')):
         autoalign(images,int(char0),thresh=float(thresh),border=0,fnames=fnames)
     elif ((char9=='1') | (char9=='2')):
-        align(images,int(char9))
+        align_click_stars(images)
     elif (align_method == 'OpenCV'):
         align_cv(images)
     elif (align_method == 'astrometric'):
@@ -7629,10 +7574,13 @@ def find_image_coords():
                 if oldname != '': objname = oldname + ', ' + newname.upper()
                 else:             objname = newname.upper()
         else:
-            objectra.SetValue( decimal_to_min_sec(0.0))
-            objectdec.SetValue(decimal_to_min_sec(0.0))
+            ra_str  = objectra.GetValue()
+            dec_str = objectdec.GetValue()
+            ra  = min_sec_to_decimal( ra_str)
+            dec = min_sec_to_decimal( ra_str)
 
-
+# objectra.SetValue( decimal_to_min_sec(0.0))
+# objectdec.SetValue(decimal_to_min_sec(0.0))
 def get_star_info(ra_mid,dec_mid,fov,maxmag):
     import astropy.units as u
     from astropy.coordinates import SkyCoord
@@ -7847,8 +7795,6 @@ def get_star_info(ra_mid,dec_mid,fov,maxmag):
     bflux    = bflux[0:j]
 
     return ra, dec, mag, absmag, coloridx, parallax, pm_ra, pm_dec 
-
-
 def show_gaia_image(evt): 
 #   import astroquery.gaia
     import astropy.units as u
@@ -7861,6 +7807,7 @@ def show_gaia_image(evt):
     global image_type
     global ra, dec, parallax
     global gflux, rflux, bflux
+    global dt
 
     w = 250
     folder = 'fit'+slash
@@ -7903,6 +7850,7 @@ def show_gaia_image(evt):
 
     fov = float(objectfov.GetValue())
     maxmag = float(objectmaxmag.GetValue())
+    dt = float(objectdt.GetValue())
     if (fov <= 5):
         abs_vs_app = 'Apparent'
     else:
@@ -8032,10 +7980,10 @@ def show_gaia_image(evt):
                         A20[j-w:j+w,i-w:i+w,1] += g*flux*PSF_R[:,:,1]
                         A20[j-w:j+w,i-w:i+w,2] += b*flux*PSF_R[:,:,2]
 
-#               1000 years in the future
+#               dt years in the future
                 j  = w+m-int(round(m*(z-zmin)/(zmax-zmin)))
                 i  = w+n-int(round(n*( y  - ymin)/( ymax-ymin)))
-                dx,dy,dz = gnomonic(ra[k]+pm_ra[k]/3600,dec[k]+pm_dec[k]/3600,ra_mid,dec_mid)
+                dx,dy,dz = gnomonic(ra[k]+(dt/1000)*pm_ra[k]/3600,dec[k]+(dt/1000)*pm_dec[k]/3600,ra_mid,dec_mid)
                 j2 = w+m-int(round(m*(dz-zmin)/(zmax-zmin)))
                 i2 = w+n-int(round(n*( dy  - ymin)/( ymax-ymin)))
                 if ((i>=w) & (i<n+w) & (j>=w) & (j<m+w)):
@@ -8067,8 +8015,6 @@ def show_gaia_image(evt):
     bflux    =    bflux[keepit]
 
     print(tab,'fov = ', maxdec-mindec)
-
-
     print(tab,'number of plotted stars = ', num_stars)
     txt4 = '{space:32s}Number of stars: {space:2s}{ns:d} '
     lbl4.SetLabel( txt4.format(space=' ', ns= num_stars) )
@@ -8171,11 +8117,20 @@ def show_image(evt):
         print(tab,imagename,', ', (NonFit_files[k].split(slash)[-1]).split('.')[0])
         if (imagename == NonFit_files[k].split(slash)[-1]):
             close(2)
-            (m,n,three) = shape(images2[k])
-            image2 = zeros((m,n,3), dtype=float32)
-            image2[:,:,:] = images2[k][:,:,:]
-            print('Bob2')
-            fig = slidershow(image2, folder=folder, fignum=2)
+            if (len(shape(images2[k])) == 3): 
+                (m,n,three) = shape(images2[k])
+                image2 = zeros((m,n,3), dtype=float32)
+                image2[:,:,:] = images2[k][:,:,:]
+                print('Bob3')
+                fig = slidershow(image2, folder=folder, fignum=2)
+            else:
+                (m,n) = shape(images2[k])
+                image2 = zeros((m,n,3), dtype=float32)
+                image2[:,:,0] = images2[k][:,:]
+                image2[:,:,1] = images2[k][:,:]
+                image2[:,:,2] = images2[k][:,:]
+                print('Bob2')
+                fig = slidershow(image2, folder=folder, fignum=2)
             return
     for k in range(len(fnames)):
         if imagename == fnames[k]: 
@@ -8197,8 +8152,6 @@ def min_sec_to_decimal(min_sec_str):
     else:
         decimal = -(hour + (minute + second/60)/60)
     return decimal
-
-
 
 def astrometric_analysis(evt):
     global RGB, folder, name
@@ -8417,8 +8370,6 @@ def make3D(evt):
     K, LconvL2 = findstars(L,thresh, fignum=23)
     num_stars = np.sum(K)
 #   close(22)
-
-
     '''
     K[0:30,:] = 0
     K[m-30:m,:] = 0
@@ -8658,8 +8609,6 @@ def make3D(evt):
         = get_star_info(ra_mid=ra_ctr,dec_mid=dec_ctr,fov=1.5*(dec_max-dec_min),maxmag=13)
 
     num_hyg_stars = len(hyg_ra)
-
-
     parallax_max    = np.percentile(hyg_parallax, 99)
     parallax_min    = np.percentile(hyg_parallax,  1)
     parallax_median = np.percentile(hyg_parallax, 50)
@@ -8668,8 +8617,6 @@ def make3D(evt):
     print('dist = ', dist)
     obj_parallax = 1000/dist
     print(tab,'obj parallax = ', obj_parallax, ', median parallax = ', parallax_median)
-
-
 
     pos_diff = zeros(num_stars, dtype='float32')
     for star in arange(num_stars):
@@ -9100,26 +9047,25 @@ def GUI_makeColorDiag0(evt):
 def got_updated():
     show_fwhm()
     btn16.Enable()
-
-
-
-
 #=======================================================
 
 global btn0, btn4, btn6, btn7, btn8, btn10, btn11, btn12, btn13, btn14, btn15, btn16, btn17, btn18, btn20, btn21
-global lbl1, lbl2, lbl3, lbl4, lbl5, lbl6, lbl6a, lbl7, lbl8, lbl8a, lbl9, lbl11, lbl_ra, lbl_dec
+global lbl1, lbl2, lbl3, lbl4, lbl5, lbl6, lbl6a, lbl7, lbl8, lbl8a, lbl9, lbl11, lbl17, lbl_ra, lbl_dec
 global progress, gauge
 global option1, option2, option3, option4, option5, option6, option7, option8, option9
 global objectid, objectra, objectdec, objectfov
 global pixres, showalign, align_method, stack_method, flip, removehotpix, neatimage, deconvFWHM, deconvFWHMa, mag0, mag1
 global thresh
 
+lbl9 = ''
+lbl11 = ''
+
 gauge = 0
 
 stack_method = 'Outliers Removed'
 
-lbl9  = ''
-lbl11 = ''
+#lbl9  = ''
+#lbl11 = ''
 
 def set_align_method(event):
     global align_method
@@ -9303,7 +9249,7 @@ def StackImages():
     thresh = 0.1
     sizer.Add(wx.StaticText(panel, label=' Align images using: '), pos=(row, 0), flag=wx.ALL, border=2)
     option1 = wx.Choice(panel, choices = \
-            ['no stars', '1 star', '2 stars', '3 stars', 'click on 1 star',
+            ['no stars', '1 star autoalign', '2 star autoalign', '3 star autoalign', 'click on 1 star',
             'click on 2 stars' \
             , 'astrometric' \
 #           , 'OpenCV' \
@@ -9562,10 +9508,6 @@ def StackImages():
 #   panel.Center()
 #   panel.Show()
 #   panel.Fit()
-
-
-
-
     '''
     images_frame = wx.Frame(None, -1, 'Images', size=[1000,880])
 #   images_frame.SetPosition(wx.Point(xpos, 26))
@@ -9596,8 +9538,6 @@ def StackImages():
     mainframe = MainFrame(None, -1, 'wx.SplitterWindow')
     mainframe.Show(True)
     '''
-
-
     app.MainLoop()
 
     tab = tab[0:-4]
@@ -9615,9 +9555,9 @@ def ShowClusters():
     global version
     global btn0, btn4, btn6, btn7, btn8, btn10, btn11, btn12, btn13, btn14, btn15, btn16, btn17, btn20
     global progress, gauge
-    global lbl1, lbl2, lbl3, lbl4, lbl5, lbl6, lbl7, lbl8, lbl8a, lbl9, lbl10, lbl11
+    global lbl1, lbl2, lbl3, lbl4, lbl5, lbl6, lbl7, lbl8, lbl8a, lbl9, lbl10, lbl11, lbl17
     global option8, option9
-    global objectid, objectra, objectdec, objectfov, objectmaxmag
+    global objectid, objectra, objectdec, objectfov, objectmaxmag, objectdt
     global flat, flat_file
     global bias, bias_file
     global pixres, showalign, align_method, flip, removehotpix, neatimage, deconvFWHM, deconvFWHMa, mag0, mag1
@@ -9635,9 +9575,9 @@ def ShowClusters():
     xpos = 360
 
     app = wx.App(redirect=False)
-    appsize = minimum(array(wx.DisplaySize())-50,(xpos,450))
+    appsize = minimum(array(wx.DisplaySize())-50,(xpos,550))
     frame = wx.Frame(None, title='Show Clusters w/ Gaia Data', size=appsize)
-    frame.SetPosition(wx.Point(0, 26))
+    frame.SetPosition(wx.Point(0, 36))
 #   panel = wx.Panel(frame)
     panel = wx.ScrolledWindow(frame)
     sizer = wx.GridBagSizer(0,0)
@@ -9706,6 +9646,13 @@ def ShowClusters():
     option8.SetSelection(0)
 
     row += 1
+    sizer.Add(wx.StaticText(panel, label='Animation Rate: '), pos=(row, 0), flag=wx.ALL, border=2)
+    objectdt = wx.TextCtrl(panel, value='0.0', size=(108,22))
+    sizer.Add(objectdt, pos=(row, 1), flag=wx.ALL, border=2)
+    lbl17 = wx.StaticText(panel, label='years ')
+    sizer.Add(lbl17, pos=(row,2), span=(1,3), flag=wx.ALL, border=2)
+
+    row += 1
     btn15 = wx.Button(panel, label='Show Stars')  #, command = lambda:show_gaia_image())
     panel.Bind(wx.EVT_BUTTON, show_gaia_image, btn15)
     sizer.Add(btn15, pos=(row, 1), flag=wx.ALL, border=2)
@@ -9755,6 +9702,20 @@ def ShowClusters():
 
     panel.SetSizerAndFit(sizer)
     panel.SetScrollbars(1,1,1,1)
+    
+    row += 1
+    sizer.Add(wx.StaticText(panel, label=' '), pos=(row, 0), flag=wx.ALL, border=2)
+    
+    row += 1
+    lbl9 = wx.StaticText(panel, label='')
+    sizer.Add(lbl9, pos=(row,0), span=(1,5), flag=wx.ALL, border=2)
+    
+    row += 1
+    lbl11 = wx.StaticText(panel, label=' Star Info: ')
+    sizer.Add(lbl11, pos=(row,0), span=(3,5), flag=wx.ALL, border=2)
+    
+    row += 3
+    sizer.Add(wx.StaticText(panel, label=' '), pos=(row, 0), flag=wx.ALL, border=2)
 
     frame.Show(True)
 #   panel.Center()

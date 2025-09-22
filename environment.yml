@@ -1,0 +1,17 @@
+name: BobsAstro
+channels:
+  - astropy
+  - apple
+  - conda-forge
+  - defaults
+dependencies:
+  - astropy
+  - astroquery
+  - imageio
+  - matplotlib
+  - opencv
+  - pyqt
+  - qt=5
+  - scipy==1.11.2
+  - wxpython
+prefix: /Users/bino/miniconda3/envs/BobsAstro

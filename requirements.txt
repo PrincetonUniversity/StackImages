@@ -1,0 +1,10 @@
+numpy
+scipy==1.11.2
+astropy
+astroquery
+imageio
+matplotlib
+opencv-python
+PyQt5
+wxPython
+Pillow
