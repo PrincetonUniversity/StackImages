@@ -25,16 +25,15 @@ jobs:
 
       - name: Install dev dependencies
         run: |
-          # Ensure the created conda env is active for the following commands
-          conda activate BobsAstro
-          python -m pip install --upgrade pip
-          if [ -f requirements-dev.txt ]; then python -m pip install -r requirements-dev.txt; fi
-          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+          # Run pip inside the BobsAstro environment using `conda run` to avoid needing `conda init`
+          conda run -n BobsAstro python -m pip install --upgrade pip
+          if [ -f requirements-dev.txt ]; then conda run -n BobsAstro python -m pip install -r requirements-dev.txt; fi
+          if [ -f requirements.txt ]; then conda run -n BobsAstro python -m pip install -r requirements.txt; fi
 
       - name: Run tests
         run: |
-          conda activate BobsAstro
-          python -m pytest -q
+          # Run tests inside the conda env without requiring shell activation
+          conda run -n BobsAstro python -m pytest -q
 
       - name: Create release tar (uncompressed .tar)
         id: create_tar
