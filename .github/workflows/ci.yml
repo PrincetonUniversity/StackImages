@@ -25,11 +25,15 @@ jobs:
 
       - name: Install dev dependencies
         run: |
+          # Ensure the created conda env is active for the following commands
+          conda activate BobsAstro
           python -m pip install --upgrade pip
           if [ -f requirements-dev.txt ]; then python -m pip install -r requirements-dev.txt; fi
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
 
       - name: Run tests
         run: |
+          conda activate BobsAstro
           python -m pytest -q
 
       - name: Create release tar (uncompressed .tar)
@@ -58,7 +62,7 @@ jobs:
       - name: Download artifact (tar)
         uses: actions/download-artifact@v4
         with:
-          name: stackimages-tar
+          name: PyWin
           path: dist
 
 
