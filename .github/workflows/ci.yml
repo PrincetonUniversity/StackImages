@@ -32,8 +32,16 @@ jobs:
 
       - name: Run tests
         run: |
-          # Run tests inside the conda env without requiring shell activation
-          conda run -n BobsAstro python -m pytest -q
+          # Diagnostics: show which python and packages inside the env, then run pytest verbosely
+          echo "--- diagnostics start ---"
+          conda run -n BobsAstro which python || true
+          conda run -n BobsAstro python -V || true
+          conda run -n BobsAstro python -m pip --version || true
+          conda run -n BobsAstro python -m pip freeze || true
+          echo "--- diagnostics end ---"
+
+          # Run pytest verbosely so CI logs contain full failure traces
+          conda run -n BobsAstro python -m pytest -vv
 
       - name: Create release tar (uncompressed .tar)
         id: create_tar
