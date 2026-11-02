@@ -130,7 +130,7 @@ Small differences are still possible in these cases:
 
 | Workflow | Runs on | Does |
 |---|---|---|
-| `ci.yml` (desktop) | push/PR to `main`, except web-only files | Desktop GUI tests under Xvfb, equivalence test, packaging tests in `ci/desktop-tests.Dockerfile`; builds `PyWin.tar`; on `main`, publishes a `v-<sha>` release |
+| `ci.yml` (desktop) | push/PR to `main`, except web-only files; manual | Desktop GUI tests under Xvfb, equivalence test, packaging tests in `ci/desktop-tests.Dockerfile`; builds `PyWin.tar`; on `main`, publishes release `v<ass.py version>.<n>` when the bundle's app/data files changed (`scripts/next_release.py`) |
 | `pages.yml` (web) | push/PR touching the web files; manual | eslint + tsc (Node container), ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`), verified Pyodide download, site build with the latest snapshots; deploys on `main` |
 | `snapshots.yml` | manual only | Queries Gaia for ~75 clusters (`scripts/build_snapshots.py`), validates, publishes a `snapshots-*` release, redeploys the page. Resumes from the last release; re-run to fill gaps |
 
