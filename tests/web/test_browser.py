@@ -76,7 +76,11 @@ def sites(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, str]]:
     build_site.build(base / "with", ROOT / "build" / "vendor", snapshots)
     build_site.build(base / "without", ROOT / "build" / "vendor", None)
     with serve(base / "with") as with_url, serve(base / "without") as without_url:
-        yield {"with": with_url, "without": without_url}
+        yield {
+            "with": f"{with_url}ShowClusters/",
+            "without": f"{without_url}ShowClusters/",
+            "root": without_url,
+        }
 
 
 def gavo_ok(requests: list[dict[str, list[str]]]):  # type: ignore[no-untyped-def]
@@ -280,4 +284,12 @@ def test_no_requests_leave_the_site_except_gavo(browser, sites) -> None:  # type
     page.click("#show-stars")
     page.wait_for_function("!document.getElementById('stars-panel').hidden", timeout=60_000)
     assert {h for h in hosts if not h.startswith("127.0.0.1")} == {"dc.g-vo.org"}
+    page.close()
+
+
+def test_site_root_redirects_to_show_clusters(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    page = browser.new_page()
+    page.goto(sites["root"] + "?x=1#top")
+    page.wait_for_url("**/ShowClusters/?x=1#top")
+    assert page.title() == "Show Clusters with Gaia Data"
     page.close()

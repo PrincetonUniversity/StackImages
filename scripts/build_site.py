@@ -31,6 +31,20 @@ import showclusters as sc  # noqa: E402
 
 WEB_FILES = ("index.html", "app.js", "worker.js", "style.css", "showclusters.py")
 CATALOGS = ("NI2021_MessierObjects.csv", "NI2021_NGCObjects.csv", "ICObj.csv")
+APP_PATH = "ShowClusters"  # served at https://princetonuniversity.github.io/StackImages/ShowClusters/
+# The site root (the first link shared) forwards to the app, keeping any ?query or #hash.
+REDIRECT = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Show Clusters</title>
+  <meta http-equiv="refresh" content="0; url=ShowClusters/">
+  <link rel="canonical" href="ShowClusters/">
+  <script>location.replace("ShowClusters/" + location.search + location.hash);</script>
+</head>
+<body><p>Show Clusters has moved to <a href="ShowClusters/">ShowClusters/</a>.</p></body>
+</html>
+"""
 
 
 def digest(path: Path) -> str:
@@ -58,12 +72,14 @@ def check_snapshots(source: Path) -> dict[str, dict]:
     return index
 
 
-def build(out: Path, vendor: Path, snapshots: Path | None) -> None:
+def build(site: Path, vendor: Path, snapshots: Path | None) -> None:
+    """Write the site: the app under site/ShowClusters/, and a redirect at site/."""
     if not (vendor / "pyodide.mjs").is_file():
         raise SystemExit(f"{vendor} has no Pyodide runtime; run scripts/vendor_pyodide.py first")
     index = check_snapshots(snapshots) if snapshots else {}
-    if out.exists():
-        shutil.rmtree(out)
+    if site.exists():
+        shutil.rmtree(site)
+    out = site / APP_PATH
     (out / "data" / "csv").mkdir(parents=True)
 
     for name in WEB_FILES:
@@ -91,7 +107,8 @@ def build(out: Path, vendor: Path, snapshots: Path | None) -> None:
     app = (out / "app.js").read_text()
     worker_version = digest(out / "worker.js")[:12]
     (out / "app.js").write_text(app.replace('new URL("worker.js"', f'new URL("worker.js?v={worker_version}"'))
-    (out / ".nojekyll").write_text("")
+    (site / ".nojekyll").write_text("")
+    (site / "index.html").write_text(REDIRECT)
 
     files = {
         p.relative_to(out).as_posix(): digest(p)
@@ -104,7 +121,7 @@ def build(out: Path, vendor: Path, snapshots: Path | None) -> None:
         "files": files,
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n")
-    size = sum(p.stat().st_size for p in out.rglob("*") if p.is_file())
+    size = sum(p.stat().st_size for p in site.rglob("*") if p.is_file())
     print(f"Built {out}: {len(files)} files, {size / 1e6:.1f} MB, {len(index)} snapshots")
 
 
