@@ -50,7 +50,10 @@ def _run_and_capture_title(script_path, expected_title):
 """ % script_path)
 
     cmd = [sys.executable, '-c', runner]
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # A GUI that reaches MainLoop() would block forever; fail loudly instead.
+    proc = subprocess.run(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120
+    )
     out = proc.stdout.strip()
     # Try to parse JSON from the last line of stdout
     if not out:

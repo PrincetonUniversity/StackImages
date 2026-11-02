@@ -1,0 +1,10 @@
+services:
+  desktop-tests:
+    build:
+      context: .
+      dockerfile: ci/desktop-tests.Dockerfile
+    platform: linux/amd64
+    init: true  # xvfb-run hangs when it runs as PID 1
+    volumes:
+      - .:/work:ro
+    working_dir: /work

@@ -125,4 +125,7 @@ pythonw %USERPROFILE%\Downloads\StackImages\StackImages.py
 Notes
 -----
 - The distributed release artifact produced by CI is named `PyWin.tar` to match legacy expectations.
+  It is built by `scripts/package_pywin.sh` and contains only the desktop app and its data under `PyWin/`.
+- Maintainers: run the desktop tests locally with `docker-compose run --rm desktop-tests`.
+  `environment.yml` and `ci/conda-linux-64.lock` define the CI environment; regenerate the lock with `scripts/lock_conda_env.sh`.
 - This README text is adapted from https://orfe.io/stackimg.html. For the latest instructions or additional details, see that page.
