@@ -138,3 +138,7 @@ node_modules/
 *.db
 *.partial
 web/vendor/
+
+# Web build output
+_site/
+.venv/
