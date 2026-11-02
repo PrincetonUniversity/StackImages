@@ -1,14 +1,15 @@
+import json
 import subprocess
 import sys
 import textwrap
-import json
 
 
 def _run_and_capture_title(script_path, expected_title):
     # We run Python and pre-patch wx.Frame to capture titles created by the script.
     # The inline Python imports wx, wraps Frame, runs the target script via runpy,
     # and prints a JSON with the captured titles.
-    runner = textwrap.dedent(f"""
+    runner = textwrap.dedent(
+        """
     import runpy, sys, json
     import wx as _wx
 
@@ -47,13 +48,13 @@ def _run_and_capture_title(script_path, expected_title):
         pass
 
     print(json.dumps(Captured))
-""" % script_path)
-
-    cmd = [sys.executable, '-c', runner]
-    # A GUI that reaches MainLoop() would block forever; fail loudly instead.
-    proc = subprocess.run(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120
+"""
+        % script_path
     )
+
+    cmd = [sys.executable, "-c", runner]
+    # A GUI that reaches MainLoop() would block forever; fail loudly instead.
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120)
     out = proc.stdout.strip()
     # Try to parse JSON from the last line of stdout
     if not out:
@@ -70,12 +71,12 @@ def _run_and_capture_title(script_path, expected_title):
 
 
 def test_getfit_title():
-    script = 'GetFit.py'
-    titles = _run_and_capture_title(script, 'Download Astro Fits Files')
-    assert 'Download Astro Fits Files' in titles, f"Expected title not found in {titles}"
+    script = "GetFit.py"
+    titles = _run_and_capture_title(script, "Download Astro Fits Files")
+    assert "Download Astro Fits Files" in titles, f"Expected title not found in {titles}"
 
 
 def test_stackimages_title():
-    script = 'StackImages.py'
-    titles = _run_and_capture_title(script, 'Align, Stack, Show')
-    assert 'Align, Stack, Show' in titles, f"Expected title not found in {titles}"
+    script = "StackImages.py"
+    titles = _run_and_capture_title(script, "Align, Stack, Show")
+    assert "Align, Stack, Show" in titles, f"Expected title not found in {titles}"

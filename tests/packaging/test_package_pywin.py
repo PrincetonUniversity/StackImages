@@ -9,9 +9,7 @@ SCRIPT = ROOT / "scripts" / "package_pywin.sh"
 
 
 def run(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["zsh", str(SCRIPT), *args], cwd=ROOT, capture_output=True, text=True, timeout=120
-    )
+    return subprocess.run(["zsh", str(SCRIPT), *args], cwd=ROOT, capture_output=True, text=True, timeout=120)
 
 
 def test_bundle_is_minimal_and_under_pywin(tmp_path: Path) -> None:
