@@ -93,18 +93,19 @@ def build(out: Path, vendor: Path, snapshots: Path | None) -> None:
     (out / "app.js").write_text(app.replace('new URL("worker.js"', f'new URL("worker.js?v={worker_version}"'))
     (out / ".nojekyll").write_text("")
 
+    files = {
+        p.relative_to(out).as_posix(): digest(p)
+        for p in sorted(out.rglob("*"))
+        if p.is_file() and p.name != "manifest.json"
+    }
     manifest = {
         "built": datetime.now(UTC).isoformat(timespec="seconds"),
         "snapshots": len(index),
-        "files": {
-            p.relative_to(out).as_posix(): digest(p)
-            for p in sorted(out.rglob("*"))
-            if p.is_file() and p.name != "manifest.json"
-        },
+        "files": files,
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n")
     size = sum(p.stat().st_size for p in out.rglob("*") if p.is_file())
-    print(f"Built {out}: {len(manifest['files'])} files, {size / 1e6:.1f} MB, {len(index)} snapshots")
+    print(f"Built {out}: {len(files)} files, {size / 1e6:.1f} MB, {len(index)} snapshots")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -194,7 +194,7 @@ async function savedCopy(name, field) {
   }
   const response = await fetch(`data/snapshots/${entry.file}`);
   if (!response.ok) return null;
-  return { bytes: new Uint8Array(await response.arrayBuffer()), date: entry.date };
+  return { bytes: new Uint8Array(await response.arrayBuffer()), date: entry.date, from: entry.source || "ESA" };
 }
 
 /**
@@ -235,7 +235,7 @@ async function onShowStars() {
     }
     const saved = objectName ? await savedCopy(objectName, field) : null;
     if (saved) {
-      await showStars(saved.bytes, "saved.csv", `Gaia DR3 saved copy from ESA (${saved.date})`, 0);
+      await showStars(saved.bytes, "saved.csv", `Gaia DR3 saved copy from ${saved.from} (${saved.date})`, 0);
       setStatus(`The live data source was unavailable (${reason}), so a saved copy was used.`);
       return;
     }
@@ -384,7 +384,7 @@ async function onHrDiagram() {
   refresh();
   setStatus("Drawing the HR diagram…");
   try {
-    const png = /** @type {Uint8Array} */ (await call("hrDiagram", { magnitudeType: magtype.value }));
+    const png = /** @type {Uint8Array<ArrayBuffer>} */ (await call("hrDiagram", { magnitudeType: magtype.value }));
     if (hrUrl) URL.revokeObjectURL(hrUrl);
     hrUrl = URL.createObjectURL(new Blob([png], { type: "image/png" }));
     hrImage.src = hrUrl;
