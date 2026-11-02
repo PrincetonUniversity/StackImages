@@ -505,3 +505,101 @@ def hr_png(stars: Stars, magnitude_type: str, title: str, source: str) -> bytes:
     out = io.BytesIO()
     fig.savefig(out, format="png", facecolor="black")
     return out.getvalue()
+
+
+# --- Filtering saved or uploaded results to the requested field -------------------------
+
+
+def within_query(
+    gaia: dict[str, np.ndarray], ra_hours: float, dec_deg: float, fov: float, maxmag: float
+) -> np.ndarray:
+    """Rows the ADQL query would return: DISTANCE(...) < fov/√2 and G < maxmag."""
+    ra0, dec0 = math.radians(ra_hours * 15), math.radians(dec_deg)
+    ra, dec = np.radians(gaia["ra"]), np.radians(gaia["dec"])
+    with np.errstate(invalid="ignore"):
+        hav = np.sin((dec - dec0) / 2) ** 2 + np.cos(dec) * math.cos(dec0) * np.sin((ra - ra0) / 2) ** 2
+        distance = np.degrees(2 * np.arcsin(np.sqrt(np.clip(hav, 0, 1))))
+        return np.asarray((distance < fov / math.sqrt(2)) & (gaia["phot_g_mean_mag"] < maxmag))
+
+
+# --- Browser session: the state kept between button clicks -----------------------------
+
+
+@dataclass
+class Session:
+    catalog_dir: Path
+    bright: np.ndarray  # bright_star_rows(), shape (n, 7)
+    psf: np.ndarray  # prepare_psf() output, already scaled for RENDER_SIZE
+    frame: Frame | None = None
+    title: str = ""
+    source: str = ""
+
+    def lookup(self, name: str) -> dict[str, Any]:
+        found = lookup_object(name, self.catalog_dir)
+        return {
+            "name": found.name,
+            "ra": format_sexagesimal(found.ra_hours),
+            "dec": format_sexagesimal(found.dec_deg),
+        }
+
+    def plan(self, ra_text: str, dec_text: str, fov: float, maxmag: float) -> dict[str, Any]:
+        """Validate the inputs exactly as the boxes show them; return both queries."""
+        ra, dec = parse_sexagesimal(ra_text), parse_sexagesimal(dec_text)
+        return {
+            "ra": ra,
+            "dec": dec,
+            "gavo": gaia_adql(ra, dec, fov, maxmag, "gavo"),
+            "esa": gaia_adql(ra, dec, fov, maxmag, "esa"),
+        }
+
+    def show_stars(
+        self,
+        data: bytes,
+        filename: str,
+        source: str,
+        ra_text: str,
+        dec_text: str,
+        fov: float,
+        maxmag: float,
+        title: str,
+        max_rows: int = 0,
+    ) -> dict[str, Any]:
+        """Show Stars: select, frame and render. Returns numbers + display image bytes."""
+        self.frame = None
+        if hasattr(data, "to_bytes"):  # a JavaScript Uint8Array arriving through Pyodide
+            data = data.to_bytes()
+        query = self.plan(ra_text, dec_text, fov, maxmag)
+        gaia = parse_gaia_table(data, filename)
+        rows = len(gaia["ra"])
+        inside = within_query(gaia, query["ra"], query["dec"], fov, maxmag)
+        notes: list[str] = []
+        if max_rows and rows >= max_rows:
+            notes.append(f"The server stopped at {max_rows:,} stars; use a smaller field or magnitude limit.")
+        if rows and not inside.any():
+            raise InputError(
+                "None of the stars in this file are inside the requested field. "
+                "Was it downloaded for a different object or field of view?"
+            )
+        if rows and inside.mean() < 0.5:
+            notes.append(f"Only {int(inside.sum()):,} of {rows:,} stars in the file are inside the field.")
+        gaia = {name: values[inside] for name, values in gaia.items()}
+        stars = select_stars(gaia, self.bright, query["ra"], query["dec"], fov)
+        frame = frame_stars(stars, query["ra"], query["dec"], fov)
+        image = render_field(frame, self.psf, RENDER_SIZE)
+        base, pct_lo, pct_hi = display_base(image)
+        self.frame, self.title, self.source = frame, title, source
+        return {
+            "count": frame.count,
+            "brightest": None if math.isnan(frame.brightest) else round(frame.brightest, 2),
+            "rows": rows,
+            "notes": notes,
+            "size": RENDER_SIZE,
+            "pct_lo": pct_lo,
+            "pct_hi": pct_hi,
+            "image": base.tobytes(),
+        }
+
+    def hr_diagram(self, magnitude_type: str) -> bytes:
+        if self.frame is None:
+            raise InputError("Click Show Stars first.")
+        return hr_png(self.frame.stars, magnitude_type, self.title, self.source)

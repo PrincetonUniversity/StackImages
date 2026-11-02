@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Show Clusters with Gaia Data</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" type="module"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">StackImages · Show Clusters</p>
+      <h1>Show Clusters with Gaia Data</h1>
+      <p class="intro">Look up a star cluster, see its stars as Gaia measured them, and draw its
+        Hertzsprung–Russell diagram. Everything runs in this browser tab; nothing to install.</p>
+    </header>
+
+    <section class="panel" aria-labelledby="field-heading">
+      <h2 id="field-heading">1. Choose a field</h2>
+      <form id="field" novalidate>
+        <div class="grid">
+          <label for="object">Object Catalog Name</label>
+          <div><input id="object" autocomplete="off" spellcheck="false" placeholder="m13, NGC5466, IC4665">
+            <span class="hint">Press Enter to look it up.</span></div>
+          <label for="ra">Right Ascension (RA)</label>
+          <div><input id="ra" value="+00 : 00 : 00" spellcheck="false"> <span class="hint">h : m : s</span></div>
+          <label for="dec">Declination (Dec)</label>
+          <div><input id="dec" value="+00 : 00 : 00" spellcheck="false"> <span class="hint">d : m : s</span></div>
+          <label for="fov">Field of View (FOV)</label>
+          <div><input id="fov" type="number" value="0.3" min="0.01" max="5" step="0.05"> <span class="hint">degrees</span></div>
+          <label for="maxmag">Maximum Magnitude</label>
+          <div><input id="maxmag" type="number" value="16" min="4.5" max="21" step="0.5"></div>
+        </div>
+        <div class="actions">
+          <button id="show-stars" type="submit" disabled>Show Stars</button>
+        </div>
+      </form>
+      <p id="status" role="status" aria-live="polite">Loading Python and the star catalogs… The first visit downloads about 40 MB.</p>
+      <p id="error" role="alert" hidden></p>
+      <details id="load-details" hidden><summary>Loading details</summary><pre id="load-error"></pre></details>
+      <button id="retry" class="secondary" type="button" hidden>Reload tool</button>
+    </section>
+
+    <section id="stars-panel" class="panel" aria-labelledby="stars-heading" hidden>
+      <h2 id="stars-heading">2. The stars</h2>
+      <dl class="facts">
+        <dt>Number of stars</dt><dd id="count"></dd>
+        <dt>Brightest star</dt><dd id="brightest"></dd>
+        <dt>Data</dt><dd id="source"></dd>
+      </dl>
+      <ul id="notes" class="notes"></ul>
+      <canvas id="sky" width="1200" height="1200" aria-label="Simulated view of the stars in the field"></canvas>
+      <div class="sliders">
+        <label for="colsat">color saturation <output id="colsat-value"></output></label>
+        <input id="colsat" type="range" min="-1" max="10" step="0.05" value="5">
+        <label for="gamma">nonlinear stretch <output id="gamma-value"></output></label>
+        <input id="gamma" type="range" min="0" max="10" step="0.05" value="2">
+        <label for="mini">min <output id="mini-value"></output></label>
+        <input id="mini" type="range" step="any">
+        <label for="maxi">max <output id="maxi-value"></output></label>
+        <input id="maxi" type="range" step="any">
+      </div>
+      <div class="actions"><a id="sky-download" class="download secondary" href="#">Download picture (PNG)</a></div>
+    </section>
+
+    <section id="hr-panel" class="panel" aria-labelledby="hr-heading" hidden>
+      <h2 id="hr-heading">3. HR diagram</h2>
+      <div class="actions">
+        <label for="magtype" class="inline">Select Magnitude Type</label>
+        <select id="magtype"><option>Apparent</option><option>Absolute</option></select>
+        <button id="hr-button" type="button">HR Diagram</button>
+      </div>
+      <img id="hr" alt="Hertzsprung–Russell diagram of the stars shown above" hidden>
+      <div class="actions"><a id="hr-download" class="download" href="#" hidden>Download HR diagram (PNG)</a></div>
+    </section>
+
+    <section class="panel" aria-labelledby="upload-heading">
+      <details id="upload">
+        <summary id="upload-heading">Use a file from the ESA Gaia archive instead</summary>
+        <p>If the live data source is unavailable, or you want ESA's own copy of Gaia DR3:</p>
+        <ol>
+          <li>Fill in the field above (object, FOV, maximum magnitude).</li>
+          <li>Copy this query, open the <a href="https://gea.esac.esa.int/archive/" target="_blank" rel="noopener">ESA Gaia archive</a>,
+            choose <em>Search → Advanced (ADQL)</em>, paste it and submit.</li>
+          <li>Download the result as CSV, VOTable or FITS, and choose that file below.</li>
+        </ol>
+        <pre id="adql">Fill in the field above to see the query.</pre>
+        <div class="actions">
+          <button id="copy-adql" type="button" class="secondary" disabled>Copy query</button>
+        </div>
+        <label for="file">Gaia result file <span class="hint">(.csv, .vot, .xml, .fits; up to 50 MB)</span></label>
+        <input id="file" type="file" accept=".csv,.vot,.votable,.xml,.fits,.fit,.fts">
+        <div class="actions"><button id="use-file" type="button" disabled>Show Stars from this file</button></div>
+      </details>
+    </section>
+
+    <footer>
+      <p>Star data: Gaia DR3 (ESA), served live by the German Astrophysical Virtual Observatory
+        (<a href="https://dc.g-vo.org/" target="_blank" rel="noopener">GAVO</a>), with saved copies from the
+        <a href="https://gea.esac.esa.int/archive/" target="_blank" rel="noopener">ESA Gaia archive</a> as a fallback;
+        bright stars from the HYG catalog. Python runs in your browser via
+        <a href="https://pyodide.org/" target="_blank" rel="noopener">Pyodide</a>. Based on ShowClusters in
+        <a href="https://github.com/PrincetonUniversity/StackImages" target="_blank" rel="noopener">StackImages</a>
+        by Robert Vanderbei.</p>
+    </footer>
+  </main>
+</body>
+</html>
