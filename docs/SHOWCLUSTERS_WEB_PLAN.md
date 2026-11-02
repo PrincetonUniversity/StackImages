@@ -6,6 +6,23 @@ Ship ShowClusters as a static Pyodide page on GitHub Pages so students can do HW
 link, with no conda, wxPython or StackImages install. HW #7 is due the weekend of Nov 7–8,
 so the page must be live and checked by Bob by **Wed Nov 4**.
 
+## Status (updated 2026-11-02)
+
+Live at https://princetonuniversity.github.io/StackImages/. How it works: [WEB.md](WEB.md).
+
+| Item | State |
+|---|---|
+| Desktop CI fixed; `PyWin.tar` packaging script | Done (PR #1) |
+| `web/showclusters.py` port + equivalence test vs `ass.py` | Done (PR #2) |
+| Page, worker, GAVO live data, ESA upload | Done (PR #2) |
+| Pages workflow and deployment | Done (PR #2) |
+| Snapshot builder with ESA → GAVO fallback; `snapshots.yml` | Done (PR #3); first run pending |
+| eslint + tsc in CI; web tests in a container | Done (PR #3) |
+| Bob reviews the page with HW #7; homework text updated | Open |
+| Bob's decisions in §9 (snapshot list, caps, quirks, `Coathanger.png`) | Open |
+
+The rest of this document is the original plan; where it differs, WEB.md describes what was built.
+
 ## 1. Scope
 
 In scope:
