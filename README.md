@@ -122,6 +122,20 @@ pythonw %USERPROFILE%\Downloads\StackImages\GetFit.py
 pythonw %USERPROFILE%\Downloads\StackImages\StackImages.py
 ```
 
+Show Clusters in the browser
+----------------------------
+A browser version of ShowClusters (no installation) is published at
+https://princetonuniversity.github.io/StackImages/. It is built from `web/` by
+`.github/workflows/pages.yml`; `ass.py` is unchanged. To build and test it locally:
+
+```bash
+uv venv --python 3.13 .venv && uv pip install --python .venv/bin/python -r requirements-web.lock
+.venv/bin/python scripts/vendor_pyodide.py          # pinned, verified Pyodide into build/vendor
+.venv/bin/python -m playwright install chromium
+.venv/bin/python -m pytest tests/web               # unit + browser tests
+.venv/bin/python scripts/build_site.py --no-snapshots && .venv/bin/python -m http.server -d _site 8000
+```
+
 Notes
 -----
 - The distributed release artifact produced by CI is named `PyWin.tar` to match legacy expectations.
