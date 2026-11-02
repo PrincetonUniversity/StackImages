@@ -1,7 +1,8 @@
 name: Pages (web)
 
 # The Show Clusters web page. Independent of ci.yml (desktop): each has its own path
-# filters and neither waits for the other.
+# filters and neither waits for the other. Checks and builds run in the pinned
+# containers from compose.yaml (web-tools, lint-js).
 on:
   push:
     branches: [main]
@@ -9,13 +10,20 @@ on:
       - "web/**"
       - "scripts/vendor_pyodide.py"
       - "scripts/build_site.py"
+      - "scripts/build_snapshots.py"
       - "tests/web/**"
       - "csv/NI2021_*.csv"
       - "csv/ICObj.csv"
       - "csv/hygdata_v3.csv"
       - "fit/sxv_psf4-RGB.fit"
       - "requirements-web.lock"
+      - "package.json"
+      - "package-lock.json"
+      - "eslint.config.mjs"
+      - "tsconfig.json"
       - "pyproject.toml"
+      - "compose.yaml"
+      - "ci/web-tools.Dockerfile"
       - ".github/workflows/pages.yml"
   pull_request:
     branches: [main]
@@ -23,15 +31,22 @@ on:
       - "web/**"
       - "scripts/vendor_pyodide.py"
       - "scripts/build_site.py"
+      - "scripts/build_snapshots.py"
       - "tests/web/**"
       - "csv/NI2021_*.csv"
       - "csv/ICObj.csv"
       - "csv/hygdata_v3.csv"
       - "fit/sxv_psf4-RGB.fit"
       - "requirements-web.lock"
+      - "package.json"
+      - "package-lock.json"
+      - "eslint.config.mjs"
+      - "tsconfig.json"
       - "pyproject.toml"
+      - "compose.yaml"
+      - "ci/web-tools.Dockerfile"
       - ".github/workflows/pages.yml"
-  workflow_dispatch:
+  workflow_dispatch:  # also started by snapshots.yml after publishing new snapshots
 
 permissions:
   contents: read
@@ -43,31 +58,30 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: docker/setup-compose-action@v1
         with:
-          python-version: "3.13"
-      - name: Install pinned tools
-        run: python -m pip install -q -r requirements-web.lock
-      - name: Lint, format and type checks
-        run: |
-          ruff check web scripts tests
-          ruff format --check web scripts tests
-          mypy
+          version: v2.39.4
+      - name: Provide docker-compose command
+        run: echo "$GITHUB_WORKSPACE/.github/bin" >> "$GITHUB_PATH"
+      - name: Build tool images
+        run: docker-compose build web-tools
+      - name: JavaScript lint and type checks (eslint, tsc)
+        run: docker-compose run --rm -T lint-js sh -c "npm ci --ignore-scripts --no-audit --no-fund && npm run check"
+      - name: Python lint, format and type checks (ruff, mypy)
+        run: docker-compose run --rm -T web-tools sh -c "ruff check web scripts tests && ruff format --check web scripts tests && mypy"
       - name: Cache Pyodide
         uses: actions/cache@v4
         with:
           path: build/vendor
           key: pyodide-${{ hashFiles('scripts/vendor_pyodide.py') }}
       - name: Download and verify Pyodide
-        run: python scripts/vendor_pyodide.py
-      - name: Install Chromium for browser tests
-        run: python -m playwright install --with-deps chromium
-      - name: Unit and browser tests
-        run: python -m pytest -v tests/web
-      - name: Fetch saved ESA snapshots (latest snapshots-* release)
+        run: docker-compose run --rm -T web-tools python scripts/vendor_pyodide.py
+      - name: Unit, snapshot and browser tests
+        run: docker-compose run --rm -T web-tools python -m pytest -v -p no:cacheprovider tests/web
+      - name: Fetch saved snapshots (latest snapshots-* release)
         id: snapshots
         env:
           GH_TOKEN: ${{ github.token }}
@@ -75,15 +89,17 @@ jobs:
           tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
                   --jq '[.[].tagName | select(startswith("snapshots-"))] | sort | last // ""')
           if [ -n "$tag" ]; then
-            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern snapshots.tar.gz --dir build
-            mkdir -p build/snapshots && tar -xzf build/snapshots.tar.gz -C build/snapshots
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern snapshots.tar.gz --dir build --clobber
+            rm -rf build/snapshots && mkdir -p build/snapshots
+            tar -xzf build/snapshots.tar.gz -C build/snapshots
+            echo "Using $tag"
             echo "args=--snapshots build/snapshots" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::No snapshots-* release yet; deploying without the saved-copy fallback."
             echo "args=--no-snapshots" >> "$GITHUB_OUTPUT"
           fi
       - name: Build site
-        run: python scripts/build_site.py ${{ steps.snapshots.outputs.args }}
+        run: docker-compose run --rm -T web-tools python scripts/build_site.py ${{ steps.snapshots.outputs.args }}
       - uses: actions/configure-pages@v5
         if: github.event_name != 'pull_request'
       - uses: actions/upload-pages-artifact@v3

@@ -1,0 +1,78 @@
+name: Snapshots (web fallback data)
+
+# Builds the saved Gaia results the web page falls back to when GAVO is unavailable,
+# publishes them as a snapshots-YYYYMMDD-HHMM release (never committed), then
+# redeploys the page. Gaia DR3 does not change, so this runs on demand only.
+# Re-running resumes: snapshots from the latest release are kept and only missing
+# clusters are queried (unless "refresh" is set).
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Where to query: auto = ESA, falling back to GAVO per cluster"
+        type: choice
+        options: [auto, esa, gavo]
+        default: auto
+      refresh:
+        description: "Query every cluster again instead of resuming"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write  # create the snapshots release
+  actions: write   # start pages.yml afterwards
+
+concurrency:
+  group: snapshots
+  cancel-in-progress: false
+
+jobs:
+  snapshots:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300  # ESA's job queue can be slow
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-compose-action@v1
+        with:
+          version: v2.39.4
+      - name: Provide docker-compose command
+        run: echo "$GITHUB_WORKSPACE/.github/bin" >> "$GITHUB_PATH"
+      - name: Build tool image
+        run: docker-compose build web-tools
+      - name: Resume from the latest snapshots release
+        if: ${{ !inputs.refresh }}
+        run: |
+          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
+                  --jq '[.[].tagName | select(startswith("snapshots-"))] | sort | last // ""')
+          mkdir -p build/snapshots
+          if [ -n "$tag" ]; then
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern snapshots.tar.gz --dir build
+            tar -xzf build/snapshots.tar.gz -C build/snapshots && rm build/snapshots.tar.gz
+            echo "Resuming from $tag"
+          fi
+      - name: Query Gaia for each cluster
+        id: build
+        run: |
+          set +e
+          docker-compose run --rm -T web-tools python scripts/build_snapshots.py \
+            --out build/snapshots --source "${{ inputs.source }}" ${{ inputs.refresh && '--refresh' || '' }}
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+      - name: Validate snapshots exactly as the site build will
+        run: docker-compose run --rm -T web-tools python -c "import sys; sys.path[:0] = ['scripts', 'web']; import build_site; print(len(build_site.check_snapshots(__import__('pathlib').Path('build/snapshots'))), 'snapshots valid')"
+      - name: Publish release
+        run: |
+          tag="snapshots-$(date -u +%Y%m%d-%H%M)"
+          tar -czf build/snapshots.tar.gz -C build/snapshots .
+          gh release create "$tag" build/snapshots.tar.gz build/snapshots/index.json \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
+            --title "Web fallback snapshots $tag" \
+            --notes "Saved Gaia DR3 results used by the Show Clusters page when GAVO is unavailable. Built by snapshots.yml (source: ${{ inputs.source }})."
+      - name: Redeploy the page with these snapshots
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main
+      - name: Fail if some clusters are missing (re-run to fill them in)
+        if: steps.build.outputs.status != '0'
+        run: |
+          echo "::error::Some clusters failed; the release has the rest. Re-run this workflow to retry only the missing ones."
+          exit 1

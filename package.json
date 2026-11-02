@@ -1,0 +1,14 @@
+{
+  "name": "stackimages-web",
+  "private": true,
+  "description": "Lint and type checks for the Show Clusters web page (web/*.js).",
+  "scripts": {
+    "check": "eslint web && tsc --project tsconfig.json"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.14.0",
+    "globals": "16.5.0",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,4 +1,5 @@
 services:
+  # Desktop wxPython app: tests under a virtual display (ci.yml).
   desktop-tests:
     build:
       context: .
@@ -7,4 +8,22 @@ services:
     init: true  # xvfb-run hangs when it runs as PID 1
     volumes:
       - .:/work:ro
+    working_dir: /work
+
+  # Web page: lint, types, tests, Pyodide download, site and snapshot builds (pages.yml).
+  web-tools:
+    build:
+      context: .
+      dockerfile: ci/web-tools.Dockerfile
+    init: true
+    shm_size: 1gb  # Chromium needs more than Docker's 64 MB default
+    volumes:
+      - .:/work
+    working_dir: /work
+
+  # JavaScript lint and type checks (eslint + tsc).
+  lint-js:
+    image: node:22.16.0-bookworm-slim
+    volumes:
+      - .:/work
     working_dir: /work

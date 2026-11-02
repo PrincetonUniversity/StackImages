@@ -3,6 +3,10 @@ StackImages
 
 StackImages is a Python script and graphical interface for astrophotography image integration.
 
+**Show Clusters in the browser:** https://princetonuniversity.github.io/StackImages/ShowClusters/ — the
+ShowClusters tool (Gaia star fields and HR diagrams) with nothing to install. See
+[Show Clusters in the browser](#show-clusters-in-the-browser) below.
+
 This README includes installation and usage instructions adapted from the project's documentation:
 https://orfe.io/stackimg.html
 
@@ -124,16 +128,31 @@ pythonw %USERPROFILE%\Downloads\StackImages\StackImages.py
 
 Show Clusters in the browser
 ----------------------------
-A browser version of ShowClusters (no installation) is published at
-https://princetonuniversity.github.io/StackImages/. It is built from `web/` by
-`.github/workflows/pages.yml`; `ass.py` is unchanged. To build and test it locally:
+https://princetonuniversity.github.io/StackImages/ShowClusters/ runs ShowClusters in any modern browser
+(Chrome, Edge, Firefox, Safari) on macOS, Windows, Linux or a Chromebook:
+
+1. Type an object (`m13`, `NGC5466`, `IC4665`) and press Enter; RA and Dec fill in.
+2. Set the field of view and maximum magnitude, then click **Show Stars**.
+3. Adjust the picture with the sliders; choose Apparent or Absolute and click **HR Diagram**.
+4. Use **Download HR diagram (PNG)** to save it.
+
+How it works: the page runs Python in the browser with Pyodide. `web/showclusters.py` is a
+GUI-free port of the ShowClusters functions in `ass.py` (which is unchanged), checked against
+the original by an automated equivalence test. Star data comes live from GAVO's copy of Gaia
+DR3, with saved copies and a manual ESA-archive upload as fallbacks.
+
+Details for maintainers (architecture, data sources, whether star counts match the desktop
+app, workflows, local development, troubleshooting): [docs/WEB.md](docs/WEB.md).
+
+The site root, https://princetonuniversity.github.io/StackImages/, is a short StackImages home page
+linking to Show Clusters and to the desktop app.
+
+Quick local run (Docker only):
 
 ```bash
-uv venv --python 3.13 .venv && uv pip install --python .venv/bin/python -r requirements-web.lock
-.venv/bin/python scripts/vendor_pyodide.py          # pinned, verified Pyodide into build/vendor
-.venv/bin/python -m playwright install chromium
-.venv/bin/python -m pytest tests/web               # unit + browser tests
-.venv/bin/python scripts/build_site.py --no-snapshots && .venv/bin/python -m http.server -d _site 8000
+scripts/run_web.sh            # downloads Pyodide once, builds _site/, serves http://127.0.0.1:8000/
+docker-compose run --rm web-tools                         # web unit + browser tests
+docker-compose run --rm lint-js sh -c "npm ci && npm run check"   # eslint + tsc
 ```
 
 Notes
@@ -142,4 +161,6 @@ Notes
   It is built by `scripts/package_pywin.sh` and contains only the desktop app and its data under `PyWin/`.
 - Maintainers: run the desktop tests locally with `docker-compose run --rm desktop-tests`.
   `environment.yml` and `ci/conda-linux-64.lock` define the CI environment; regenerate the lock with `scripts/lock_conda_env.sh`.
+- CI: `ci.yml` (desktop app, `PyWin.tar`), `pages.yml` (web page) and `snapshots.yml` (web fallback data) are
+  independent workflows; see [docs/WEB.md](docs/WEB.md#workflows).
 - This README text is adapted from https://orfe.io/stackimg.html. For the latest instructions or additional details, see that page.
