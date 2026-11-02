@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: "Where to query: auto = ESA, falling back to GAVO per cluster"
+        description: "Where to query: auto = GAVO (in pieces), falling back to ESA per cluster"
         type: choice
         options: [auto, esa, gavo]
         default: auto
