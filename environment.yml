@@ -1,17 +1,22 @@
+# Desktop (wxPython) environment used by CI. Students follow the README's
+# `conda create` command instead. Only conda-forge is used: the `apple` channel
+# has no Linux packages and `defaults` requires accepting Anaconda's terms.
+# The pinned linux-64 lockfile is ci/conda-linux-64.lock (regenerate with
+# scripts/lock_conda_env.sh after editing this file).
 name: BobsAstro
 channels:
-  - astropy
-  - apple
   - conda-forge
-  - defaults
+  - nodefaults
 dependencies:
+  - python=3.11
   - astropy
   - astroquery
   - imageio
   - matplotlib
   - opencv
+  - pillow
   - pyqt
-  - qt=5
+  - qt-main=5
   - scipy==1.11.2
   - wxpython
-prefix: /Users/bino/miniconda3/envs/BobsAstro
+  - pytest

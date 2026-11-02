@@ -1,93 +1,60 @@
-name: CI (conda)
+name: CI (desktop)
 
+# Desktop wxPython app: tests in a pinned container under a virtual display,
+# then the minimal student bundle (PyWin.tar). The web page has its own
+# workflow (pages.yml); the two never block each other.
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+    paths-ignore: ["web/**", "docs/**", ".github/workflows/pages.yml"]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+    paths-ignore: ["web/**", "docs/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test-and-package:
-    runs-on: ubuntu-latest
-    outputs:
-      tar_name: ${{ steps.create_tar.outputs.tar_name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Miniconda
-        uses: conda-incubator/setup-miniconda@v3
+      - uses: actions/checkout@v4
+      - uses: docker/setup-compose-action@v1
         with:
-          auto-update-conda: true
-          python-version: '3.11'
-          activate-environment: BobsAstro
-          environment-file: environment.yml
-
-      - name: Install dev dependencies
-        run: |
-          # Run pip inside the BobsAstro environment using `conda run` to avoid needing `conda init`
-          conda run -n BobsAstro python -m pip install --upgrade pip
-          if [ -f requirements-dev.txt ]; then conda run -n BobsAstro python -m pip install -r requirements-dev.txt; fi
-          if [ -f requirements.txt ]; then conda run -n BobsAstro python -m pip install -r requirements.txt; fi
-
-      - name: Run tests
-        run: |
-          # Diagnostics: show which python and packages inside the env, then run pytest verbosely
-          echo "--- diagnostics start ---"
-          conda run -n BobsAstro which python || true
-          conda run -n BobsAstro python -V || true
-          conda run -n BobsAstro python -m pip --version || true
-          conda run -n BobsAstro python -m pip freeze || true
-          echo "--- diagnostics end ---"
-
-          # Run pytest verbosely so CI logs contain full failure traces
-          conda run -n BobsAstro python -m pytest -vv
-
-      - name: Create release tar (uncompressed .tar)
-        id: create_tar
-        env:
-          TAR_NAME: "PyWin.tar"
-        run: |
-          mkdir -p dist
-          git ls-files | tar -cf dist/${TAR_NAME} -T -
-          echo "tar_name=${TAR_NAME}" >> $GITHUB_OUTPUT
-
-      - name: Upload release artifact
-        uses: actions/upload-artifact@v4
+          version: v2.39.4
+      - name: Provide docker-compose command
+        run: echo "$GITHUB_WORKSPACE/.github/bin" >> "$GITHUB_PATH"
+      - name: Build desktop test image
+        run: docker-compose build desktop-tests
+      - name: Run desktop and packaging tests (Xvfb)
+        run: docker-compose run --rm -T desktop-tests
+      - name: Install zsh for packaging
+        run: sudo apt-get update -q && sudo apt-get install -y -q zsh
+      - name: Build PyWin.tar
+        run: scripts/package_pywin.sh --out dist/PyWin.tar
+      - uses: actions/upload-artifact@v4
         with:
           name: PyWin
           path: dist/PyWin.tar
+          if-no-files-found: error
 
   create-release:
     needs: test-and-package
-    runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download artifact (tar)
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: PyWin
           path: dist
-
-
-      - name: Create GitHub release
-        id: create_release
-        uses: actions/create-release@v1
-        with:
-          tag_name: "v-${{ github.sha }}"
-          release_name: "Release ${{ github.sha }}"
-          draft: false
-          prerelease: false
+      - name: Create GitHub release with PyWin.tar
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload tar to release
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/PyWin.tar
-          asset_name: PyWin.tar
-          asset_content_type: application/x-tar
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v-${GITHUB_SHA}" dist/PyWin.tar \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Release ${GITHUB_SHA}" --notes "Desktop bundle built from ${GITHUB_SHA}."
