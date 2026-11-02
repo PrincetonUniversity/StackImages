@@ -17,7 +17,6 @@ sys.path.insert(0, str(ROOT / "web"))
 
 import build_site  # noqa: E402
 import build_snapshots as bs  # noqa: E402
-
 import showclusters as sc  # noqa: E402
 
 ESA_CSV = (FIXTURES / "m13_esa.csv").read_bytes()
