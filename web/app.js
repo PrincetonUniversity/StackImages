@@ -5,7 +5,9 @@
 const GAVO_TAP = "https://dc.g-vo.org/tap/sync";
 const MAX_ROWS = 300000; // keep in step with showclusters.MAX_ROWS
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-const GAVO_TIMEOUT_MS = 60000;
+const GAVO_TIMEOUT_MS = 60000; // per request; GAVO itself gives up after ~20 s
+const GAVO_TOTAL_MS = 180000; // whole field, including splitting
+const GAVO_PARALLEL = 4;
 
 /** @template {HTMLElement} T @param {string} id @returns {T} */
 function $(id) {
@@ -181,8 +183,55 @@ async function fetchGavo(query) {
   const body = new URLSearchParams({ REQUEST: "doQuery", LANG: "ADQL", FORMAT: "csv", MAXREC: String(MAX_ROWS), QUERY: query });
   const response = await fetch(GAVO_TAP, { method: "POST", body, signal: AbortSignal.timeout(GAVO_TIMEOUT_MS) });
   const type = response.headers.get("content-type") || "";
-  if (!response.ok || !type.includes("csv")) throw new Error(`GAVO answered HTTP ${response.status}`);
-  return new Uint8Array(await response.arrayBuffer());
+  if (response.ok && type.includes("csv")) return new Uint8Array(await response.arrayBuffer());
+  // GAVO's quick endpoint stops queries after ~20 s and says so in its error document.
+  const text = await response.text().catch(() => "");
+  throw new GavoError(`GAVO answered HTTP ${response.status}`, /timed out/i.test(text));
+}
+
+class GavoError extends Error {
+  /** @param {string} message @param {boolean} timedOut */
+  constructor(message, timedOut) {
+    super(message);
+    this.timedOut = timedOut;
+  }
+}
+
+class TooDenseError extends Error {}
+
+/**
+ * Fetch a field as one or more pieces (large fields are split so each answers quickly);
+ * a piece that times out is split again. Returns one result per piece.
+ * @param {{query: string, radius: number}[]} tiles
+ */
+async function fetchGavoTiles(tiles) {
+  const queue = [...tiles];
+  /** @type {Uint8Array<ArrayBuffer>[]} */
+  const parts = [];
+  let total = tiles.length;
+  const deadline = Date.now() + GAVO_TOTAL_MS;
+  const report = () => setStatus(total > 1
+    ? `Downloading star data from Gaia (via GAVO)… ${parts.length} of ${total} parts`
+    : "Downloading star data from Gaia (via GAVO)…");
+  report();
+  const fetchNext = async () => {
+    while (queue.length) {
+      if (Date.now() > deadline) throw new GavoError("the field took too long to download", true);
+      const tile = /** @type {{query: string, radius: number}} */ (queue.shift());
+      try {
+        parts.push(await fetchGavo(tile.query));
+      } catch (error) {
+        if (!(error instanceof GavoError && error.timedOut)) throw error;
+        const smaller = /** @type {{query: string, radius: number}[]} */ (await call("split", { tile }));
+        if (!smaller.length) throw new TooDenseError("dense field");
+        queue.push(...smaller);
+        total += smaller.length - 1;
+      }
+      report();
+    }
+  };
+  await Promise.all(Array.from({ length: GAVO_PARALLEL }, fetchNext));
+  return parts;
 }
 
 /** @param {string} name @param {{ra: string, dec: string, fov: number, maxmag: number}} field */
@@ -198,7 +247,8 @@ async function savedCopy(name, field) {
 }
 
 /**
- * @param {Uint8Array} bytes @param {string} filename @param {string} source @param {number} maxRows
+ * @param {Uint8Array | Uint8Array[]} bytes one result, or one per piece of a large field
+ * @param {string} filename @param {string} source @param {number} maxRows
  */
 async function showStars(bytes, filename, source, maxRows) {
   const field = fieldArgs();
@@ -222,15 +272,17 @@ async function onShowStars() {
     const field = fieldArgs();
     const plan = await call("plan", field);
     setStatus("Downloading star data from Gaia (via GAVO)…");
-    let bytes;
+    let parts;
     let reason = "";
+    let dense = false;
     try {
-      bytes = await fetchGavo(plan.gavo);
+      parts = await fetchGavoTiles(plan.gavo_tiles);
     } catch (error) {
+      dense = error instanceof TooDenseError || (error instanceof GavoError && error.timedOut);
       reason = error instanceof Error && error.name === "TimeoutError" ? "it did not answer in time" : String(error instanceof Error ? error.message : error);
     }
-    if (bytes) {
-      await showStars(bytes, "gavo.csv", "Gaia DR3 via GAVO", MAX_ROWS);
+    if (parts) {
+      await showStars(parts, "gavo.csv", "Gaia DR3 via GAVO", MAX_ROWS);
       return;
     }
     const saved = objectName ? await savedCopy(objectName, field) : null;
@@ -240,10 +292,12 @@ async function onShowStars() {
       return;
     }
     uploadDetails.open = true;
-    showError(
-      `The live Gaia data source is unavailable (${reason}), and no saved copy covers this field. ` +
-      "Try again in a few minutes, or use a file from the ESA Gaia archive (below).",
-    );
+    showError(dense
+      ? "This field has too many stars for the live data source to send in time (it is wide or in a dense part " +
+        "of the Milky Way). Use a smaller Field of View or a lower Maximum Magnitude, or a file from the ESA " +
+        "Gaia archive (below)."
+      : `The live Gaia data source is unavailable (${reason}), and no saved copy covers this field. ` +
+        "Try again in a few minutes, or use a file from the ESA Gaia archive (below).");
     setStatus("No star data.");
   } catch (error) {
     report(error, "Show Stars failed");

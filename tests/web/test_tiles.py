@@ -1,0 +1,191 @@
+"""Large fields are fetched in pieces; the end result must equal one query's, exactly."""
+
+from __future__ import annotations
+
+import math
+import sys
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "web"))
+sys.path.insert(0, str(Path(__file__).parent))
+
+import showclusters as sc  # noqa: E402
+from fakegaia import FakeGaia  # noqa: E402
+
+
+def angle(ra1: float, dec1: float, ra2: Any, dec2: Any) -> Any:
+    a, b = np.radians(dec1), np.radians(dec2)
+    h = np.sin((b - a) / 2) ** 2 + np.cos(a) * np.cos(b) * np.sin(np.radians(ra2 - ra1) / 2) ** 2
+    return np.degrees(2 * np.arcsin(np.sqrt(np.clip(h, 0, 1))))
+
+
+def centre(tile: dict[str, Any], ra_hours: float, dec: float) -> tuple[float, float]:
+    return sc._sky(ra_hours * 15, dec, tile["xi"], tile["eta"])
+
+
+def random_points_in_circle(
+    ra_deg: float, dec: float, radius: float, n: int
+) -> tuple[np.ndarray, np.ndarray]:
+    rng = np.random.default_rng(7)
+    r = radius * np.sqrt(rng.random(n)) * 0.9999
+    theta = rng.random(n) * 2 * np.pi
+    points = [sc._sky(ra_deg, dec, x, y) for x, y in zip(r * np.cos(theta), r * np.sin(theta), strict=True)]
+    ras, decs = zip(*points, strict=True)
+    return np.array(ras), np.array(decs)
+
+
+# --- geometry ---------------------------------------------------------------------------
+
+
+def test_small_field_is_one_unchanged_query() -> None:
+    tiles = sc.field_tiles(16.695, 36.46, 0.3, 16, "gavo")
+    assert len(tiles) == 1
+    assert tiles[0]["query"] == sc.gaia_adql(16.695, 36.46, 0.3, 16, "gavo")
+
+
+@pytest.mark.parametrize(
+    ("ra_hours", "dec", "fov"),
+    [(8.67, 19.67, 2.0), (8.67, 19.67, 5.0), (0.02, -5.0, 3.0), (2.5, 87.0, 4.0), (12.0, -88.5, 2.5)],
+)
+def test_pieces_cover_the_whole_field(ra_hours: float, dec: float, fov: float) -> None:
+    tiles = sc.field_tiles(ra_hours, dec, fov, 16, "gavo")
+    assert len(tiles) > 1 and max(t["radius"] for t in tiles) <= sc.TILE_RADIUS + 1e-9
+    ras, decs = random_points_in_circle(ra_hours * 15, dec, fov / math.sqrt(2), 4000)
+    covered = np.zeros(len(ras), dtype=bool)
+    for tile in tiles:
+        ra_c, dec_c = centre(tile, ra_hours, dec)
+        covered |= angle(ra_c, dec_c, ras, decs) < tile["radius"]
+    assert covered.all(), f"{(~covered).sum()} uncovered points"
+
+
+def in_square(tile: dict[str, Any], xi: np.ndarray, eta: np.ndarray) -> np.ndarray:
+    return (np.abs(xi - tile["xi"]) <= tile["half"]) & (np.abs(eta - tile["eta"]) <= tile["half"])
+
+
+def plane_points(radius: float, n: int) -> tuple[np.ndarray, np.ndarray]:
+    """Random tangent-plane points (degrees) inside the projection of a sky circle."""
+    rng = np.random.default_rng(11)
+    r = math.degrees(math.tan(math.radians(radius))) * np.sqrt(rng.random(n)) * 0.9999
+    theta = rng.random(n) * 2 * np.pi
+    return r * np.cos(theta), r * np.sin(theta)
+
+
+@pytest.mark.parametrize("fov", [2.0, 5.0])
+def test_piece_squares_cover_the_field(fov: float) -> None:
+    """What splitting relies on: the pieces' squares (not just their circles) cover the field."""
+    tiles = sc.field_tiles(8.67, 19.67, fov, 16, "gavo")
+    xi, eta = plane_points(fov / math.sqrt(2), 4000)
+    covered = np.zeros(len(xi), dtype=bool)
+    for tile in tiles:
+        covered |= in_square(tile, xi, eta)
+    assert covered.all(), f"{(~covered).sum()} uncovered points"
+
+
+@pytest.mark.parametrize("fov", [0.2, 3.0])
+def test_split_pieces_cover_their_parent(fov: float) -> None:
+    ra_hours, dec = 8.67, 19.67
+    parent = sc.field_tiles(ra_hours, dec, fov, 16, "gavo")[0]
+    children = sc.split_tile(parent, ra_hours, dec, 16, "gavo")
+    assert len(children) == 4 and all(c["radius"] < parent["radius"] for c in children)
+    rng = np.random.default_rng(3)
+    xi = parent["xi"] + (rng.random(3000) * 2 - 1) * parent["half"]
+    eta = parent["eta"] + (rng.random(3000) * 2 - 1) * parent["half"]
+    covered = np.zeros(len(xi), dtype=bool)
+    for child in children:
+        covered |= in_square(child, xi, eta)
+    assert covered.all()
+    # and each child's query circle really contains its square (sky distances)
+    for child in children:
+        ra_c, dec_c = centre(child, ra_hours, dec)
+        corners = [
+            sc._sky(ra_hours * 15, dec, child["xi"] + dx * child["half"], child["eta"] + dy * child["half"])
+            for dx in (-1, 1)
+            for dy in (-1, 1)
+        ]
+        assert max(angle(ra_c, dec_c, r, d) for r, d in corners) < child["radius"]
+
+
+def test_splitting_stops_at_the_minimum_size() -> None:
+    tile = sc.field_tiles(16.695, 36.46, 0.2, 16, "gavo")[0]
+    depth = 0
+    while smaller := sc.split_tile(tile, 16.695, 36.46, 16, "gavo"):
+        tile, depth = smaller[0], depth + 1
+    assert tile["radius"] >= sc.MIN_TILE_RADIUS and depth >= 1
+
+
+def test_merge_removes_overlap_duplicates_only() -> None:
+    table = sc.parse_gaia_table((Path(__file__).parent / "fixtures" / "m13_gavo.csv").read_bytes(), "x.csv")
+    first = {k: v[:900] for k, v in table.items()}
+    second = {k: v[600:] for k, v in table.items()}  # 300 rows in both
+    merged = sc.merge_tables([first, second])
+    assert len(merged["ra"]) == len(table["ra"])
+    np.testing.assert_array_equal(np.sort(merged["ra"]), np.sort(table["ra"]))
+
+
+# --- the whole pipeline: one query vs. pieces -------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def session() -> sc.Session:
+    from astropy.io import fits
+
+    bright = np.array(sc.bright_star_rows(ROOT / "csv" / "hygdata_v3.csv"))
+    psf = sc.scale_psf(sc.prepare_psf(fits.getdata(ROOT / "fit" / "sxv_psf4-RGB.fit")), sc.RENDER_SIZE)
+    return sc.Session(ROOT / "csv", bright, psf)
+
+
+RA_TEXT, DEC_TEXT, FOV, MAXMAG = "+16 : 41 : 42", "+36 : 27 : 39", 0.2, 16.0  # M13, the fixtures' field
+
+
+def fetch_like_the_page(session: sc.Session, fake: FakeGaia) -> list[bytes]:
+    """What app.js does: fetch each piece; a piece that times out is split and re-queued."""
+    queue = list(session.plan(RA_TEXT, DEC_TEXT, FOV, MAXMAG)["gavo_tiles"])
+    parts = []
+    while queue:
+        tile = queue.pop(0)
+        status, body = fake.answer(tile["query"])
+        if status == 200:
+            parts.append(body)
+            continue
+        smaller = session.split(tile)
+        assert smaller, "field too dense for the fake service"
+        queue.extend(smaller)
+    return parts
+
+
+def run(session: sc.Session, parts: list[bytes]) -> dict[str, Any]:
+    result = session.show_stars(parts, "gavo.csv", "test", RA_TEXT, DEC_TEXT, FOV, MAXMAG, "M13")
+    assert session.frame is not None
+    return {
+        "result": result,
+        "stars": session.frame.stars,
+        "hr": {m: sc.hr_arrays(session.frame.stars, m) for m in ("Apparent", "Absolute")},
+        "png": session.hr_diagram("Absolute"),
+    }
+
+
+@pytest.mark.parametrize(("timeout_radius", "pieces"), [(0.11, 4), (0.06, 16)])
+def test_pieces_give_exactly_the_one_query_result(
+    session: sc.Session, timeout_radius: float, pieces: int
+) -> None:
+    whole_fake, split_fake = FakeGaia(), FakeGaia(timeout_radius=timeout_radius)
+    whole = run(session, fetch_like_the_page(session, whole_fake))
+    split_parts = fetch_like_the_page(session, split_fake)
+    assert len(whole_fake.queries) == 1 and len(split_parts) == pieces
+    split = run(session, split_parts)
+
+    for key in ("count", "brightest", "pct_lo", "pct_hi", "size"):
+        assert split["result"][key] == whole["result"][key], key
+    assert split["result"]["count"] > 1000
+    assert split["result"]["image"] == whole["result"]["image"]  # the picture, byte for byte
+    for name, values in whole["stars"].__dict__.items():
+        np.testing.assert_array_equal(getattr(split["stars"], name), values, err_msg=name)
+    for mode, arrays in whole["hr"].items():
+        for key, values in arrays.items():
+            np.testing.assert_array_equal(split["hr"][mode][key], values, err_msg=f"{mode} {key}")
+    assert split["png"] == whole["png"]  # the downloaded HR diagram, byte for byte
