@@ -32,19 +32,7 @@ import showclusters as sc  # noqa: E402
 WEB_FILES = ("index.html", "app.js", "worker.js", "style.css", "showclusters.py")
 CATALOGS = ("NI2021_MessierObjects.csv", "NI2021_NGCObjects.csv", "ICObj.csv")
 APP_PATH = "ShowClusters"  # served at https://princetonuniversity.github.io/StackImages/ShowClusters/
-# The site root (the first link shared) forwards to the app, keeping any ?query or #hash.
-REDIRECT = """<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Show Clusters</title>
-  <meta http-equiv="refresh" content="0; url=ShowClusters/">
-  <link rel="canonical" href="ShowClusters/">
-  <script>location.replace("ShowClusters/" + location.search + location.hash);</script>
-</head>
-<body><p>Show Clusters has moved to <a href="ShowClusters/">ShowClusters/</a>.</p></body>
-</html>
-"""
+# The site root is a StackImages home page (web/home.html) linking to the app.
 
 
 def digest(path: Path) -> str:
@@ -73,7 +61,7 @@ def check_snapshots(source: Path) -> dict[str, dict]:
 
 
 def build(site: Path, vendor: Path, snapshots: Path | None) -> None:
-    """Write the site: the app under site/ShowClusters/, and a redirect at site/."""
+    """Write the site: the app under site/ShowClusters/, the StackImages home page at site/."""
     if not (vendor / "pyodide.mjs").is_file():
         raise SystemExit(f"{vendor} has no Pyodide runtime; run scripts/vendor_pyodide.py first")
     index = check_snapshots(snapshots) if snapshots else {}
@@ -108,7 +96,11 @@ def build(site: Path, vendor: Path, snapshots: Path | None) -> None:
     worker_version = digest(out / "worker.js")[:12]
     (out / "app.js").write_text(app.replace('new URL("worker.js"', f'new URL("worker.js?v={worker_version}"'))
     (site / ".nojekyll").write_text("")
-    (site / "index.html").write_text(REDIRECT)
+    shutil.copy2(ROOT / "web" / "style.css", site / "style.css")
+    home = (ROOT / "web" / "home.html").read_text()
+    (site / "index.html").write_text(
+        home.replace('"style.css"', f'"style.css?v={digest(site / "style.css")[:12]}"')
+    )
 
     files = {
         p.relative_to(out).as_posix(): digest(p)

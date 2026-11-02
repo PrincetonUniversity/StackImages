@@ -24,8 +24,8 @@ const showButton = /** @type {HTMLButtonElement} */ ($("show-stars"));
 const status = $("status");
 const errorBox = $("error");
 const retry = $("retry");
-const starsPanel = $("stars-panel");
-const hrPanel = $("hr-panel");
+const starsContent = $("stars-content");
+const starsEmpty = $("stars-empty");
 const canvas = /** @type {HTMLCanvasElement} */ ($("sky"));
 const magtype = /** @type {HTMLSelectElement} */ ($("magtype"));
 const hrButton = /** @type {HTMLButtonElement} */ ($("hr-button"));
@@ -119,7 +119,7 @@ function clearError() {
 function refresh() {
   showButton.disabled = !ready || busy;
   useFile.disabled = !ready || busy || !fileInput.files?.length;
-  hrButton.disabled = !ready || busy;
+  hrButton.disabled = !ready || busy || !picture;
   copyButton.disabled = !adql.dataset.query;
 }
 /** @param {unknown} error @param {string} fallback */
@@ -303,8 +303,8 @@ function displayStars(result, source) {
   magtype.value = "Apparent"; // ass.py resets the magnitude type on Show Stars
   hrImage.hidden = true;
   hrDownload.hidden = true;
-  starsPanel.hidden = false;
-  hrPanel.hidden = false;
+  starsContent.hidden = false;
+  starsEmpty.hidden = true;
   draw();
   skyDownload.download = `${objectName || "field"}.png`;
 }

@@ -153,7 +153,7 @@ def test_homework_flow_with_live_gavo(browser, sites) -> None:  # type: ignore[n
     page = open_page(browser, sites["without"], gavo_ok(requests))
     enter_m13(page)
     page.click("#show-stars")
-    page.wait_for_function("!document.getElementById('stars-panel').hidden", timeout=60_000)
+    page.wait_for_function("!document.getElementById('stars-content').hidden", timeout=60_000)
     assert page.text_content("#count") == "1,369"
     assert page.text_content("#brightest") == "11.36"
     assert page.text_content("#source") == "Gaia DR3 via GAVO"
@@ -197,7 +197,7 @@ def test_show_stars_resets_magnitude_type(browser, sites) -> None:  # type: igno
     page = open_page(browser, sites["without"], gavo_ok([]))
     enter_m13(page)
     page.click("#show-stars")
-    page.wait_for_function("!document.getElementById('stars-panel').hidden", timeout=60_000)
+    page.wait_for_function("!document.getElementById('stars-content').hidden", timeout=60_000)
     page.select_option("#magtype", "Absolute")
     assert page.input_value("#magtype") == "Absolute"
     page.click("#show-stars")
@@ -211,7 +211,7 @@ def test_falls_back_to_saved_copy_when_gavo_is_down(browser, sites) -> None:  # 
     page = open_page(browser, sites["with"], gavo_down)
     enter_m13(page)
     page.click("#show-stars")
-    page.wait_for_function("!document.getElementById('stars-panel').hidden", timeout=60_000)
+    page.wait_for_function("!document.getElementById('stars-content').hidden", timeout=60_000)
     assert page.text_content("#source") == "Gaia DR3 saved copy from ESA (2026-11-02)"
     assert page.text_content("#count") == "1,369"
     assert "saved copy was used" in page.text_content("#status")
@@ -226,7 +226,7 @@ def test_saved_copy_not_used_for_a_bigger_field(browser, sites) -> None:  # type
     page.wait_for_selector("#error:not([hidden])")
     assert "no saved copy covers this field" in page.text_content("#error")
     assert page.evaluate("document.getElementById('upload').open") is True
-    assert page.is_hidden("#stars-panel")
+    assert page.is_hidden("#stars-content")
     page.close()
 
 
@@ -240,7 +240,7 @@ def test_upload_esa_file_when_gavo_is_down(browser, sites, fixture: str) -> None
     assert "FROM gaiadr3.gaia_source" in page.text_content("#adql")
     page.set_input_files("#file", str(FIXTURES / fixture))
     page.click("#use-file")
-    page.wait_for_function("!document.getElementById('stars-panel').hidden", timeout=60_000)
+    page.wait_for_function("!document.getElementById('stars-content').hidden", timeout=60_000)
     assert page.text_content("#count") == "1,369"
     assert page.text_content("#source") == f"Gaia DR3 from uploaded ESA file ({fixture})"
     page.close()
@@ -282,14 +282,32 @@ def test_no_requests_leave_the_site_except_gavo(browser, sites) -> None:  # type
     )
     enter_m13(page)
     page.click("#show-stars")
-    page.wait_for_function("!document.getElementById('stars-panel').hidden", timeout=60_000)
+    page.wait_for_function("!document.getElementById('stars-content').hidden", timeout=60_000)
     assert {h for h in hosts if not h.startswith("127.0.0.1")} == {"dc.g-vo.org"}
     page.close()
 
 
-def test_site_root_redirects_to_show_clusters(browser, sites) -> None:  # type: ignore[no-untyped-def]
+def test_home_page_links_to_show_clusters(browser, sites) -> None:  # type: ignore[no-untyped-def]
     page = browser.new_page()
-    page.goto(sites["root"] + "?x=1#top")
-    page.wait_for_url("**/ShowClusters/?x=1#top")
+    page.goto(sites["root"])
+    assert page.title() == "StackImages"
+    assert page.evaluate("getComputedStyle(document.querySelector('.panel')).borderRadius") == "14px"
+    page.click("#open-clusters")
+    page.wait_for_url("**/ShowClusters/")
     assert page.title() == "Show Clusters with Gaia Data"
+    page.click(".eyebrow a")  # back to the home page
+    page.wait_for_function("document.title === 'StackImages'")
+    page.close()
+
+
+def test_all_steps_visible_before_any_data(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    for heading in ("1. Choose a field", "2. The stars", "3. HR diagram"):
+        assert page.is_visible(f"h2:text-is('{heading}')"), heading
+    assert page.is_visible("#stars-empty") and page.is_hidden("#stars-content")
+    assert page.is_disabled("#hr-button")
+    enter_m13(page)
+    page.click("#show-stars")
+    page.wait_for_function("!document.getElementById('stars-content').hidden", timeout=60_000)
+    assert page.is_hidden("#stars-empty") and page.is_enabled("#hr-button")
     page.close()

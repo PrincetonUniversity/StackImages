@@ -12,7 +12,7 @@
 <body>
   <main>
     <header>
-      <p class="eyebrow">StackImages · Show Clusters</p>
+      <p class="eyebrow"><a href="../">StackImages</a> · Show Clusters</p>
       <h1>Show Clusters with Gaia Data</h1>
       <p class="intro">Look up a star cluster, see its stars as Gaia measured them, and draw its
         Hertzsprung–Russell diagram. Everything runs in this browser tab; nothing to install.</p>
@@ -23,7 +23,7 @@
       <form id="field" novalidate>
         <div class="grid">
           <label for="object">Object Catalog Name</label>
-          <div><input id="object" autocomplete="off" spellcheck="false" placeholder="m13, NGC5466, IC4665">
+          <div><input id="object" autocomplete="off" spellcheck="false" placeholder="m13, NGC5466">
             <span class="hint">Press Enter to look it up.</span></div>
           <label for="ra">Right Ascension (RA)</label>
           <div><input id="ra" value="+00 : 00 : 00" spellcheck="false"> <span class="hint">h : m : s</span></div>
@@ -44,8 +44,10 @@
       <button id="retry" class="secondary" type="button" hidden>Reload tool</button>
     </section>
 
-    <section id="stars-panel" class="panel" aria-labelledby="stars-heading" hidden>
+    <section id="stars-panel" class="panel" aria-labelledby="stars-heading">
       <h2 id="stars-heading">2. The stars</h2>
+      <p id="stars-empty" class="placeholder">The stars in your field appear here after you click Show Stars.</p>
+      <div id="stars-content" hidden>
       <dl class="facts">
         <dt>Number of stars</dt><dd id="count"></dd>
         <dt>Brightest star</dt><dd id="brightest"></dd>
@@ -64,10 +66,12 @@
         <input id="maxi" type="range" step="any">
       </div>
       <div class="actions"><a id="sky-download" class="download secondary" href="#">Download picture (PNG)</a></div>
+      </div>
     </section>
 
-    <section id="hr-panel" class="panel" aria-labelledby="hr-heading" hidden>
+    <section id="hr-panel" class="panel" aria-labelledby="hr-heading">
       <h2 id="hr-heading">3. HR diagram</h2>
+      <p id="hr-empty" class="placeholder">Plots the stars from step 2. Choose Apparent or Absolute magnitude, then click HR Diagram.</p>
       <div class="actions">
         <label for="magtype" class="inline">Select Magnitude Type</label>
         <select id="magtype"><option>Apparent</option><option>Absolute</option></select>

@@ -41,3 +41,11 @@ footer { margin-top: 28px; }
   .panel { padding: 18px; }
   .grid, .sliders { grid-template-columns: 1fr; }
 }
+.placeholder { color: #536b82; font-style: italic; margin: 0; }
+.feature { border-color: #174f77; }
+.badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: #e3eef7; color: #174f77; font-size: .75rem; font-weight: 600; vertical-align: middle; }
+.tools { display: grid; grid-template-columns: max-content 1fr; gap: 10px 16px; }
+.tools dt { font-weight: 600; }
+.tools dd { margin: 0; }
+@media (max-width: 600px) { .tools { grid-template-columns: 1fr; } }
+.eyebrow a { color: inherit; }
