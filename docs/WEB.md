@@ -2,9 +2,10 @@
 
 **Live page:** https://princetonuniversity.github.io/StackImages/ShowClusters/
 
-The site root, https://princetonuniversity.github.io/StackImages/, redirects there. A project
-site's address is always `<org>.github.io/<repo>/`, so `…github.io/ShowClusters/` would need the
-repo renamed or a separate `ShowClusters` repo holding a redirect.
+The site root, https://princetonuniversity.github.io/StackImages/, is a StackImages home page
+(`web/home.html`) that links to Show Clusters and to the desktop app. GitHub serves a project site
+at `<org>.github.io/<repo>/`, so the app lives in a `ShowClusters/` folder of this repo's site rather
+than at `…github.io/ShowClusters/`, which would need a renamed or separate repo.
 
 The web page does what `ShowClusters` (in `ass.py`) does: look up a Messier, NGC or IC
 object, download its Gaia DR3 stars, draw the simulated star field, and plot the HR
@@ -18,7 +19,8 @@ install. The desktop app is unchanged and still ships in `PyWin.tar`.
 StackImages/
 ├── ass.py, ShowClusters.py, …        desktop app (Bob's code, unchanged)
 ├── web/
-│   ├── index.html, style.css         the page
+│   ├── home.html                     StackImages home page (site root)
+│   ├── index.html, style.css         the Show Clusters page (site/ShowClusters/)
 │   ├── app.js                        form, Gaia requests, picture sliders, downloads
 │   ├── worker.js                     starts Pyodide in a background thread
 │   └── showclusters.py               the science: a GUI-free port of ShowClusters

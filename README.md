@@ -144,6 +144,9 @@ DR3, with saved copies and a manual ESA-archive upload as fallbacks.
 Details for maintainers (architecture, data sources, whether star counts match the desktop
 app, workflows, local development, troubleshooting): [docs/WEB.md](docs/WEB.md).
 
+The site root, https://princetonuniversity.github.io/StackImages/, is a short StackImages home page
+linking to Show Clusters and to the desktop app.
+
 Quick local run (Docker only):
 
 ```bash
