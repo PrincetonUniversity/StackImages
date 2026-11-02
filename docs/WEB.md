@@ -1,6 +1,10 @@
 # Show Clusters on the web
 
-**Live page:** https://princetonuniversity.github.io/StackImages/
+**Live page:** https://princetonuniversity.github.io/StackImages/ShowClusters/
+
+The site root, https://princetonuniversity.github.io/StackImages/, redirects there. A project
+site's address is always `<org>.github.io/<repo>/`, so `…github.io/ShowClusters/` would need the
+repo renamed or a separate `ShowClusters` repo holding a redirect.
 
 The web page does what `ShowClusters` (in `ass.py`) does: look up a Messier, NGC or IC
 object, download its Gaia DR3 stars, draw the simulated star field, and plot the HR

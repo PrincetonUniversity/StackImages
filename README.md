@@ -3,7 +3,7 @@ StackImages
 
 StackImages is a Python script and graphical interface for astrophotography image integration.
 
-**Show Clusters in the browser:** https://princetonuniversity.github.io/StackImages/ — the
+**Show Clusters in the browser:** https://princetonuniversity.github.io/StackImages/ShowClusters/ — the
 ShowClusters tool (Gaia star fields and HR diagrams) with nothing to install. See
 [Show Clusters in the browser](#show-clusters-in-the-browser) below.
 
@@ -128,7 +128,7 @@ pythonw %USERPROFILE%\Downloads\StackImages\StackImages.py
 
 Show Clusters in the browser
 ----------------------------
-https://princetonuniversity.github.io/StackImages/ runs ShowClusters in any modern browser
+https://princetonuniversity.github.io/StackImages/ShowClusters/ runs ShowClusters in any modern browser
 (Chrome, Edge, Firefox, Safari) on macOS, Windows, Linux or a Chromebook:
 
 1. Type an object (`m13`, `NGC5466`, `IC4665`) and press Enter; RA and Dec fill in.

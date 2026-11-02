@@ -34,5 +34,5 @@ if (( DRY_RUN )); then
 fi
 "${vendor[@]}"
 "${build[@]}"
-print "Serving http://127.0.0.1:$PORT/ (Ctrl-C to stop)"
+print "Serving http://127.0.0.1:$PORT/ShowClusters/ (Ctrl-C to stop)"
 "${serve[@]}"

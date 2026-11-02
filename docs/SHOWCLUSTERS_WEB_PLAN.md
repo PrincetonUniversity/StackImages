@@ -8,7 +8,7 @@ so the page must be live and checked by Bob by **Wed Nov 4**.
 
 ## Status (updated 2026-11-02)
 
-Live at https://princetonuniversity.github.io/StackImages/. How it works: [WEB.md](WEB.md).
+Live at https://princetonuniversity.github.io/StackImages/ShowClusters/. How it works: [WEB.md](WEB.md).
 
 | Item | State |
 |---|---|
@@ -43,7 +43,7 @@ Out of scope:
 ## 2. Architecture
 
 **Decided:** the page lives in the StackImages repo under `web/`, published to
-`https://princetonuniversity.github.io/StackImages/`. The desktop app (`ass.py`,
+`https://princetonuniversity.github.io/StackImages/ShowClusters/`. The desktop app (`ass.py`,
 `ShowClusters.py`, `StackImages.py`, `GetFit.py`, `csv/`, `fit/`, …) stays **untouched**, so
 Bob can keep sending whole new versions of `ass.py`.
 
