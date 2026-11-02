@@ -100,6 +100,8 @@ Every result is labelled with its source on the page and in the HR diagram's cor
 | Port vs original `ass.py` on identical Gaia data (M13, 0.2°, mag 16) | Identical: 1,369 stars, brightest 11.36, same picture and HR points |
 | GAVO vs ESA, M13, 0.2°, mag 16 | Identical: 1,498 rows → 1,369 plotted |
 | GAVO vs ESA, M13, 0.2°, mag 18 (HW #7 Problem 1) | Identical: 6,771 rows → 4,588 plotted, brightest 11.36 |
+| GAVO vs ESA, M13, 0.3°, mag 16 (the page's defaults) | Identical: 1,609 rows → 1,472 plotted, brightest 10.34 |
+| GAVO vs ESA, M44, 1.5°, mag 18 (HW #7 Problem 2) | Not yet compared: ESA's archive returned HTTP 500 on every attempt (2026-11-02). GAVO gives 3,893 plotted |
 | Gaia DR3 itself | Frozen since its June 2022 release, so ESA answers the same as last year |
 
 Small differences are still possible in these cases:
