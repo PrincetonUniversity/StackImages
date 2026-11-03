@@ -34,11 +34,9 @@ Show Clusters (StackImages): a copy to put on your own web site
 2. Open it through the web server (https://...), not from your disk (file:///...):
    browsers do not run the page's background worker from local files.
 
-3. The server must send these two content types; browsers refuse the files otherwise:
-     .mjs   text/javascript      (application/javascript also works)
-     .wasm  application/wasm
-   A server with no entry for them usually sends application/octet-stream. If so,
-   the page says which file has the wrong type when it opens.
+3. No server settings are needed. The page works whatever content types the server
+   sends for its .wasm, .whl, .npy and data files (application/octet-stream is fine),
+   as long as .js, .html and .css have their usual types.
 
 The page reads star data from GAVO (https://dc.g-vo.org) in the visitor's browser, so a
 Content-Security-Policy must allow connect-src https://dc.g-vo.org (https: covers it).

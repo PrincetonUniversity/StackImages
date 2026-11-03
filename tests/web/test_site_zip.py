@@ -30,12 +30,11 @@ import zip_site  # noqa: E402
 # What vanderbei.princeton.edu sends (captured 2026-11-03): nosniff, its CSP, and its
 # content types; a type it has no entry for comes back as application/octet-stream.
 HOST = json.loads((FIXTURES / "personal_site_headers.json").read_text())
-CORRECT_TYPES = {".mjs": "text/javascript", ".wasm": "application/wasm"}
 
 
 @pytest.fixture(scope="module")
 def site(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    if not (ROOT / "build" / "vendor" / "pyodide.mjs").is_file():
+    if not (ROOT / "build" / "vendor" / "pyodide.js").is_file():
         pytest.fail("build/vendor is missing: run scripts/vendor_pyodide.py first")
     site = tmp_path_factory.mktemp("zip") / "site"
     build_site.build(site, ROOT / "build" / "vendor", None)
@@ -127,7 +126,9 @@ def watch(page) -> list[str]:  # type: ignore[no-untyped-def]
 
 
 def test_unzipped_copy_works_under_a_strict_host(browser, archive: Path, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
-    with personal_site(archive, tmp_path, HOST["types"] | CORRECT_TYPES) as url:
+    """Bob's site as it is, VM or Blob: no entries for .mjs, .wasm, .npy or .whl, so they all
+    come back as application/octet-stream, with nosniff. No server change may be needed."""
+    with personal_site(archive, tmp_path, HOST["types"]) as url:
         page = browser.new_page()
         problems = watch(page)
         page.route(f"{GAVO}*", gavo_ok([]))
@@ -147,28 +148,4 @@ def test_unzipped_copy_works_under_a_strict_host(browser, archive: Path, tmp_pat
         page.click("a[href='../']")
         page.wait_for_selector("#open-clusters")  # the home page in the same folder
         assert problems == []
-        page.close()
-
-
-@pytest.mark.parametrize(
-    ("missing", "file", "wanted"),
-    [
-        (".mjs", "vendor/pyodide.mjs", "text/javascript"),
-        (".wasm", "vendor/pyodide.asm.wasm", "application/wasm"),
-    ],
-)
-def test_wrong_content_type_is_explained(  # type: ignore[no-untyped-def]
-    browser, archive: Path, tmp_path: Path, missing: str, file: str, wanted: str
-) -> None:
-    """With no entry for .mjs or .wasm a server sends application/octet-stream, which the
-    browser refuses (the .wasm case used to leave the page loading forever)."""
-    types = HOST["types"] | {k: v for k, v in CORRECT_TYPES.items() if k != missing}
-    with personal_site(archive, tmp_path, types) as url:
-        page = browser.new_page()
-        page.goto(url)
-        page.wait_for_selector("#error:not([hidden])", timeout=30_000)
-        message = page.text_content("#error") or ""
-        assert f"{file} as application/octet-stream (it must be {wanted})" in message
-        assert "HOSTING.txt" in message
-        assert sum(name in message for name in ("pyodide.mjs", "pyodide.asm.wasm")) == 1
         page.close()

@@ -27,7 +27,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 playwright_api = pytest.importorskip("playwright.sync_api")
-if not (ROOT / "build" / "vendor" / "pyodide.mjs").is_file():
+if not (ROOT / "build" / "vendor" / "pyodide.js").is_file():
     pytest.fail("build/vendor is missing: run scripts/vendor_pyodide.py before the browser tests")
 
 import build_site  # noqa: E402

@@ -62,7 +62,7 @@ def check_snapshots(source: Path) -> dict[str, dict]:
 
 def build(site: Path, vendor: Path, snapshots: Path | None) -> None:
     """Write the site: the app under site/ShowClusters/, the StackImages home page at site/."""
-    if not (vendor / "pyodide.mjs").is_file():
+    if not (vendor / "pyodide.js").is_file():
         raise SystemExit(f"{vendor} has no Pyodide runtime; run scripts/vendor_pyodide.py first")
     index = check_snapshots(snapshots) if snapshots else {}
     if site.exists():
@@ -72,7 +72,7 @@ def build(site: Path, vendor: Path, snapshots: Path | None) -> None:
 
     for name in WEB_FILES:
         shutil.copy2(ROOT / "web" / name, out / name)
-    shutil.copytree(vendor, out / "vendor", ignore=shutil.ignore_patterns("*.partial"))
+    shutil.copytree(vendor, out / "vendor", ignore=shutil.ignore_patterns("*.partial", "*.mjs"))
     for name in CATALOGS:
         shutil.copy2(ROOT / "csv" / name, out / "data" / "csv" / name)
 

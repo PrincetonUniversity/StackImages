@@ -16,34 +16,25 @@ async function fetchBytes(path) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-/** [file, accepted content types, the type to ask for]: browsers refuse these runtime files
- * when a server sends another type. @type {[string, RegExp, string][]} */
-const RUNTIME_TYPES = [
-  ["vendor/pyodide.mjs", /^(text|application)\/(x-)?javascript\b/i, "text/javascript"],
-  ["vendor/pyodide.asm.wasm", /^application\/wasm\b/i, "application/wasm"],
-];
-
-/** On a server with the wrong content types, Pyodide fails with a vague message (.mjs) or
- * never finishes loading (.wasm). Check first, so the page can say what to fix. */
-async function wrongContentTypes() {
-  const wrong = [];
-  for (const [path, accepted, wanted] of RUNTIME_TYPES) {
-    let response;
-    try {
-      response = await fetch(path, { method: "HEAD" });
-    } catch {
-      continue; // offline or no HEAD support: let loading report it
+// A classic worker (importScripts, not import) on purpose: web servers that know nothing of
+// .mjs or .wasm send them as application/octet-stream, which browsers refuse for modules
+// and for streamed WebAssembly. This worker loads Pyodide from pyodide.js, and the
+// wrapper below compiles the .wasm from its bytes when its type is wrong, so a copy of
+// the site works on any static host without configuration (scripts/zip_site.py).
+const streaming = WebAssembly.instantiateStreaming;
+if (typeof streaming === "function") {
+  WebAssembly.instantiateStreaming = async (source, imports) => {
+    const response = await source;
+    if (/^application\/wasm\b/i.test(response.headers.get("content-type") ?? "")) {
+      return streaming(response, imports);
     }
-    const type = response.headers.get("content-type") ?? "";
-    if (response.ok && !accepted.test(type)) wrong.push(`${path} as ${type || "no type"} (it must be ${wanted})`);
-  }
-  return wrong;
+    return WebAssembly.instantiate(await response.arrayBuffer(), imports);
+  };
 }
 
 async function start() {
-  const runtimeModule = new URL("./vendor/pyodide.mjs", import.meta.url).href;
-  const { loadPyodide } = await import(runtimeModule);
-  runtime = await loadPyodide({ indexURL: new URL("./vendor/", import.meta.url).href });
+  context.importScripts("vendor/pyodide.js");
+  runtime = await context.loadPyodide({ indexURL: new URL("vendor/", self.location.href).href });
   stage = "Scientific packages";
   await runtime.loadPackage(["numpy", "matplotlib", "astropy"]);
   stage = "Star catalogs";
@@ -63,20 +54,10 @@ sc.Session(Path("/data/csv"), np.load("/data/bright_stars.npy"), np.load("/data/
 `);
 }
 
-try {
-  const wrong = await wrongContentTypes();
-  if (wrong.length) {
-    const hint =
-      `This web server sends ${wrong.join(" and ")}, so the browser will not run ${wrong.length > 1 ? "them" : "it"}. ` +
-      "Whoever runs the site needs to fix those content types (see HOSTING.txt).";
-    context.postMessage({ type: "fatal", stage, message: hint, hint });
-  } else {
-    await start();
-    context.postMessage({ type: "ready" });
-  }
-} catch (error) {
-  context.postMessage({ type: "fatal", stage, message: String(error) });
-}
+start().then(
+  () => context.postMessage({ type: "ready" }),
+  (error) => context.postMessage({ type: "fatal", stage, message: String(error) }),
+);
 
 /** Convert a Python result to plain JS, keeping bytes as Uint8Array. @param {any} value */
 function toJs(value) {

@@ -80,7 +80,7 @@ function startWorker() {
   ready = false;
   retry.hidden = true;
   $("load-details").hidden = true;
-  worker = new Worker(new URL("worker.js", import.meta.url), { type: "module" });
+  worker = new Worker(new URL("worker.js", import.meta.url)); // classic: see worker.js
   worker.onmessage = ({ data }) => {
     if (data.type === "ready") {
       ready = true;
@@ -89,7 +89,7 @@ function startWorker() {
       return;
     }
     if (data.type === "fatal") {
-      showError(data.hint ?? "Python could not load. Check your connection and click Reload tool.");
+      showError("Python could not load. Check your connection and click Reload tool.");
       $("load-error").textContent = `${data.stage}: ${String(data.message).slice(0, 2000)}`;
       $("load-details").hidden = false;
       retry.hidden = false;
