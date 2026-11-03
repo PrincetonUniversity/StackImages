@@ -28,9 +28,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 .notes { color: #8a5a00; margin: 0 0 12px; }
 #sky { display: block; width: 100%; height: auto; background: black; border-radius: 6px; }
-.sliders { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin-top: 14px; align-items: center; }
+/* label | value | slider. The value has its own fixed-width column (widest: "59047.00"), so
+   changing numbers never move the sliders under the pointer. */
+.sliders { display: grid; grid-template-columns: max-content 9ch 1fr; gap: 6px 12px; margin-top: 14px; align-items: center; }
 .sliders label { font-size: .92rem; }
-.sliders output { color: #536b82; font-variant-numeric: tabular-nums; margin-left: 6px; }
+.sliders output { color: #536b82; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; overflow: hidden; }
 .sliders input { width: 100%; padding: 0; border: 0; }
 #hr { display: block; width: 100%; height: auto; margin-top: 18px; border-radius: 6px; background: black; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem; background: #f5f8fb; padding: 12px; border-radius: 6px; }
@@ -41,7 +43,9 @@ footer { margin-top: 28px; }
 @media (max-width: 600px) {
   main { padding: 24px 16px; }
   .panel { padding: 18px; }
-  .grid, .sliders { grid-template-columns: 1fr; }
+  .grid { grid-template-columns: 1fr; }
+  .sliders { grid-template-columns: 1fr 9ch; }
+  .sliders input { grid-column: 1 / -1; }
 }
 .credit { color: #536b82; font-size: .82rem; margin: 10px 0 0; }
 .placeholder { color: #536b82; font-style: italic; margin: 0; }
