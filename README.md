@@ -130,9 +130,9 @@ https://princetonuniversity.github.io/StackImages/ShowClusters/ runs ShowCluster
 
 1. Type an object (`m13`, `NGC5466`, `IC4665`) and click **Look up** (or press Enter); RA and Dec fill in.
 2. Set the field of view and maximum magnitude, then click **Show Stars**.
-3. Adjust the picture with the sliders (**Reset sliders** puts them back; **Full screen** shows the
-   picture as large as the screen allows, Esc or ✕ to return); choose Apparent or Absolute and
-   click **HR Diagram**.
+3. Adjust the picture with the sliders. The ⤢ icon on the picture shows it full screen, as large as
+   the screen allows (Esc or ✕ to return). **Reset sliders**, below the downloads, puts the sliders
+   back after asking. Choose Apparent or Absolute and click **HR Diagram**.
 4. Use **Download HR diagram (PNG)** to save it. **Download star data (CSV)** saves the exact Gaia
    stars used, the field and the slider settings (upload it again to reproduce the result and picture);
    **Download HR points (CSV)** saves the diagram's points.
