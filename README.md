@@ -134,8 +134,8 @@ https://princetonuniversity.github.io/StackImages/ShowClusters/ runs ShowCluster
    picture as large as the screen allows, Esc or ✕ to return); choose Apparent or Absolute and
    click **HR Diagram**.
 4. Use **Download HR diagram (PNG)** to save it. **Download star data (CSV)** saves the exact Gaia
-   stars used (upload it again to reproduce the result); **Download HR points (CSV)** saves the
-   diagram's points.
+   stars used and the slider settings (upload it again to reproduce the result and the picture);
+   **Download HR points (CSV)** saves the diagram's points.
 
 How it works: the page runs Python in the browser with Pyodide. `web/showclusters.py` is a
 GUI-free port of the ShowClusters functions in `ass.py` (which is unchanged), checked against

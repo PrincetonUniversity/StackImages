@@ -126,7 +126,7 @@ checks that the pieces cover the field (including near the poles and across RA 0
 
 | Button | File | Contents |
 |---|---|---|
-| Download picture (PNG) | `M13.png` | The star field as currently stretched by the sliders |
+| Download picture (PNG) | `M13.png` | The star field as currently stretched by the sliders; PNG text fields record the field, the exact slider positions, the data source and the credits |
 | Download star data (CSV) | `M13_FOV0.2_G16_GAVO_2026-11-03_stars.csv` | The field's Gaia rows exactly as used, after any reassembly and trimming, in ESA's `gaiadr3.gaia_source` columns (`ra, dec, parallax, phot_g_mean_mag, bp_rp, pmra, pmdec`) |
 | Download HR diagram (PNG) | `M13_HR_Absolute.png` | The diagram shown |
 | Download HR points (CSV) | `M13_HR_Absolute_points.csv` | One row per star in the picture: catalog (Gaia DR3 or HYG), position, parallax, apparent and absolute magnitude, color index, the plotted x and y, and `drawn` |
@@ -134,6 +134,7 @@ checks that the pieces cover the field (including near the poles and across RA 0
 - **Re-uploadable star data.** The upload box reads the star-data file back unchanged and
   reproduces the same count, picture and HR points (tested), so a student can submit the exact
   data behind a diagram, or redo the work offline.
+- **Picture settings travel with the data.** The star-data file records the sliders' exact positions (`# Display sliders: colsat=…; gamma=…; mini=…; maxi=… (shown as …)`). Uploading it again sets the sliders back, so the picture matches pixel for pixel (tested); Reset still returns to the standard starting positions. Malformed or edited lines are ignored.
 - **Provenance and credit in the file.** Both CSVs start with `#` comment lines: the field, the
   data source and date, and the credits below. The upload reader skips `#` lines.
 - **`drawn`** comes from the diagram's own point sizes, so the drawn rows are exactly the diagram's
