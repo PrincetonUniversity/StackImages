@@ -89,7 +89,7 @@ function startWorker() {
       return;
     }
     if (data.type === "fatal") {
-      showError("Python could not load. Check your connection and click Reload tool.");
+      showError(data.hint ?? "Python could not load. Check your connection and click Reload tool.");
       $("load-error").textContent = `${data.stage}: ${String(data.message).slice(0, 2000)}`;
       $("load-details").hidden = false;
       retry.hidden = false;
@@ -488,6 +488,16 @@ function queueDraw() {
 /** @type {string | null} */
 let hrUrl = null;
 
+/** @param {Blob} blob @returns {Promise<string>} */
+function dataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 async function onHrDiagram() {
   if (!ready || busy) return;
   busy = true;
@@ -499,9 +509,13 @@ async function onHrDiagram() {
   setStatus("Drawing the HR diagram…");
   try {
     const png = /** @type {Uint8Array<ArrayBuffer>} */ (await call("hrDiagram", { magnitudeType: magtype.value }));
+    const blob = new Blob([png], { type: "image/png" });
     if (hrUrl) URL.revokeObjectURL(hrUrl);
-    hrUrl = URL.createObjectURL(new Blob([png], { type: "image/png" }));
-    hrImage.src = hrUrl;
+    hrUrl = URL.createObjectURL(blob);
+    // Shown as a data: URL: sites with a strict Content-Security-Policy often allow
+    // data: images but not blob: ones (vanderbei.princeton.edu does), and copies of
+    // this page may be hosted there (scripts/zip_site.py).
+    hrImage.src = await dataUrl(blob);
     hrImage.hidden = false;
     hrDownload.href = hrUrl;
     hrDownload.download = `${objectName || "field"}_HR_${magtype.value}.png`;
