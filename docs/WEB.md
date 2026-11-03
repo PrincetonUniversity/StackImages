@@ -80,6 +80,7 @@ math changed; update `web/showclusters.py` to match and the test tells you when 
 | 3D, "future" and Color Diagram options | Not included | Not used by HW #7 |
 | FOV up to any value | 0.01–5°, magnitude 4.5–21 | Browser memory; the desktop changes behaviour above 5° |
 | "Save Figure" | "Download HR diagram" / "Download picture" | Browser equivalent |
+| Picture in its own window, sliders under it | Picture sized to the screen with the sliders beside it (or below on narrow screens), plus **Reset sliders** | Picture and sliders are always visible together; Reset restores the starting stretch |
 
 ## Where the star data comes from
 
