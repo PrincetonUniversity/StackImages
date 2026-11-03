@@ -195,7 +195,7 @@ Small differences are still possible in these cases:
 | Workflow | Runs on | Does |
 |---|---|---|
 | `ci.yml` (desktop) | push/PR to `main`, except web-only files; manual | Desktop GUI tests under Xvfb, equivalence test, packaging tests in `ci/desktop-tests.Dockerfile`; builds `PyWin.tar`; on `main`, publishes release `v<ass.py version>.<n>` when the bundle's app/data files changed (`scripts/next_release.py`) |
-| `pages.yml` (web) | push/PR touching the web files; manual | eslint + tsc (Node container), ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`), verified Pyodide download, site build with the latest snapshots; deploys on `main` |
+| `pages.yml` (web) | push/PR touching the web files; manual | eslint + tsc (Node container), ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`), verified Pyodide download, site build with the latest snapshots, `StackImages-web.zip` of the site; deploys on `main` |
 | `snapshots.yml` | manual only | Fetches ~75 clusters (`scripts/build_snapshots.py`: GAVO in pieces, ESA as fallback, lower magnitude limit if both fail), validates, publishes a `snapshots-*` release, redeploys the page. Resumes from the last release; re-run to fill gaps |
 
 Nothing generated is committed: Pyodide (`build/vendor/`), the site (`_site/`) and
@@ -223,6 +223,43 @@ scripts/run_web.sh --snapshots build/snapshots
 
 Without Docker, a `.venv` works too: `uv venv --python 3.13 .venv && uv pip install
 --python .venv/bin/python -r requirements-web.lock`, then the same `python …` commands.
+
+## Hosting a copy elsewhere
+
+Every deploy also publishes the whole site as one zip:
+https://princetonuniversity.github.io/StackImages/StackImages-web.zip
+(`scripts/zip_site.py`, run by `pages.yml` after the site build). Unzipped, it is a
+`StackImages/` folder: the home page, `ShowClusters/` with Pyodide and the saved
+snapshots, and `HOSTING.txt` with these instructions. Copy the folder unchanged into
+any directory of a static web site. All links are relative, so it works from a
+subdirectory such as `/~rvdb/StackImages/`.
+
+No server settings are needed. Many hosts send `application/octet-stream` for
+extensions they don't know. Browsers refuse that type for JavaScript modules
+(`.mjs`), so the page loads Pyodide differently:
+
+- **The worker is a classic one.** It loads `pyodide.js` with `importScripts`, and
+  every host types `.js` correctly. `pyodide.mjs` isn't shipped.
+- **`.wasm` compiles from its bytes** when it doesn't arrive as `application/wasm`.
+  Pyodide would otherwise stall on it.
+- **The data files are fetched as plain bytes**, so `.whl`, `.npy`, `.csv` and `.json`
+  work with any content type.
+
+`test_site_zip.py` serves the unzipped copy the way vanderbei.princeton.edu does,
+using its headers saved in `tests/web/fixtures/personal_site_headers.json`:
+
+- `nosniff` and its Content-Security-Policy;
+- the content types from its upload map;
+- `application/octet-stream` for anything unmapped.
+
+Its CSP permits `data:` images but not `blob:` ones, so the HR diagram is shown
+through a `data:` URL.
+
+On vanderbei.princeton.edu this holds both on the current nginx VM and on the coming
+Azure Blob storage. The new extensions (`.wasm`, `.whl`, `.npy`) only need the
+vanderbei-deploy step for any new file type: `tools/gen-mime-map.sh` records whatever
+nginx serves for them, so the autosync to Blob and the cutover parity check include
+them.
 
 ## Limits and safeguards
 

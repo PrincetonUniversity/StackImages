@@ -16,10 +16,25 @@ async function fetchBytes(path) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-try {
-  const runtimeModule = new URL("./vendor/pyodide.mjs", import.meta.url).href;
-  const { loadPyodide } = await import(runtimeModule);
-  runtime = await loadPyodide({ indexURL: new URL("./vendor/", import.meta.url).href });
+// A classic worker (importScripts, not import) on purpose: web servers that know nothing of
+// .mjs or .wasm send them as application/octet-stream, which browsers refuse for modules
+// and for streamed WebAssembly. This worker loads Pyodide from pyodide.js, and the
+// wrapper below compiles the .wasm from its bytes when its type is wrong, so a copy of
+// the site works on any static host without configuration (scripts/zip_site.py).
+const streaming = WebAssembly.instantiateStreaming;
+if (typeof streaming === "function") {
+  WebAssembly.instantiateStreaming = async (source, imports) => {
+    const response = await source;
+    if (/^application\/wasm\b/i.test(response.headers.get("content-type") ?? "")) {
+      return streaming(response, imports);
+    }
+    return WebAssembly.instantiate(await response.arrayBuffer(), imports);
+  };
+}
+
+async function start() {
+  context.importScripts("vendor/pyodide.js");
+  runtime = await context.loadPyodide({ indexURL: new URL("vendor/", self.location.href).href });
   stage = "Scientific packages";
   await runtime.loadPackage(["numpy", "matplotlib", "astropy"]);
   stage = "Star catalogs";
@@ -37,10 +52,12 @@ from pathlib import Path
 import showclusters as sc
 sc.Session(Path("/data/csv"), np.load("/data/bright_stars.npy"), np.load("/data/psf.npy"))
 `);
-  context.postMessage({ type: "ready" });
-} catch (error) {
-  context.postMessage({ type: "fatal", stage, message: String(error) });
 }
+
+start().then(
+  () => context.postMessage({ type: "ready" }),
+  (error) => context.postMessage({ type: "fatal", stage, message: String(error) }),
+);
 
 /** Convert a Python result to plain JS, keeping bytes as Uint8Array. @param {any} value */
 function toJs(value) {

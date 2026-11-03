@@ -1,0 +1,14 @@
+{
+ "_comment": "vanderbei.princeton.edu on 2026-11-03 (nginx 1.24, moving to Azure Blob): its Content-Security-Policy (sent with X-Content-Type-Options: nosniff), and the content types in its upload map (vanderbei-deploy config/azcopy-mime.json) for the file types this site uses. The map has no entry for .mjs, .wasm, .npy or .whl; the tests treat those as application/octet-stream, the worst case.",
+ "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aframe.io https://button.glitch.me https://cdn.jsdelivr.net https://www.googletagmanager.com https://rvdb.orfe.princeton.edu https://unpkg.com https://cdnjs.cloudflare.com https://w.sharethis.com https://neos-guide.org https://fed.princeton.edu https://vanderbei.princeton.edu https://ajax.googleapis.com https://connect.facebook.net https://cdn.mathjax.org https://www.dropbox.com https://static.ak.fbcdn.net https://maps.googleapis.com https://code.jquery.com https://cfl.dropboxstatic.com; style-src 'self' 'unsafe-inline' https://rvdb.orfe.princeton.edu https://use.typekit.net https://vanderbei.princeton.edu https://neos-guide.org https://fonts.googleapis.com https://cfl.dropboxstatic.com https://fed.princeton.edu https://www.soaringtigers.org https://www.dropbox.com https://unpkg.com https://plusone.google.com; img-src 'self' data: https:; font-src 'self' data: https:; media-src 'self' https:; connect-src 'self' https:; frame-src 'self' https://www.youtube.com https://youtube.com; object-src 'self'; form-action 'self' https://rvdb.orfe.princeton.edu https://www.paypal.com https://vanderbei.princeton.edu https://fed.princeton.edu; base-uri 'self'; frame-ancestors 'self'",
+ "types": {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css",
+  ".js": "application/javascript; charset=utf-8",
+  ".json": "application/json",
+  ".csv": "application/octet-stream",
+  ".py": "text/plain; charset=utf-8",
+  ".zip": "application/zip",
+  ".txt": "text/plain; charset=utf-8"
+ }
+}

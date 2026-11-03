@@ -11,6 +11,7 @@ on:
       - "scripts/vendor_pyodide.py"
       - "scripts/build_site.py"
       - "scripts/build_snapshots.py"
+      - "scripts/zip_site.py"
       - "tests/web/**"
       - "csv/NI2021_*.csv"
       - "csv/ICObj.csv"
@@ -32,6 +33,7 @@ on:
       - "scripts/vendor_pyodide.py"
       - "scripts/build_site.py"
       - "scripts/build_snapshots.py"
+      - "scripts/zip_site.py"
       - "tests/web/**"
       - "csv/NI2021_*.csv"
       - "csv/ICObj.csv"
@@ -78,7 +80,11 @@ jobs:
           path: build/vendor
           key: pyodide-${{ hashFiles('scripts/vendor_pyodide.py') }}
       - name: Download and verify Pyodide
-        run: docker-compose run --rm -T web-tools python scripts/vendor_pyodide.py
+        # build/ is created here, as the runner user: if the root container created it
+        # (on a cache miss), later steps could not write the snapshots into it.
+        run: |
+          mkdir -p build/vendor
+          docker-compose run --rm -T web-tools python scripts/vendor_pyodide.py
       - name: Unit, snapshot and browser tests
         run: docker-compose run --rm -T web-tools python -m pytest -v -p no:cacheprovider tests/web
       - name: Fetch saved snapshots (latest snapshots-* release)
@@ -100,6 +106,8 @@ jobs:
           fi
       - name: Build site
         run: docker-compose run --rm -T web-tools python scripts/build_site.py ${{ steps.snapshots.outputs.args }}
+      - name: Zip the site for hosting elsewhere (served as StackImages-web.zip)
+        run: docker-compose run --rm -T web-tools python scripts/zip_site.py
       - uses: actions/configure-pages@v5
         if: github.event_name != 'pull_request'
       - uses: actions/upload-pages-artifact@v3
