@@ -19,17 +19,23 @@ on:
         default: false
 
 permissions:
-  contents: write  # create the snapshots release
-  actions: write   # start pages.yml afterwards
+  contents: read  # each job asks for what it needs
 
 concurrency:
   group: snapshots
   cancel-in-progress: false
 
+# Two jobs: the long query job only reads; a short publish job (fresh token, write access)
+# creates the release. A single job's token was refused (HTTP 403) when publishing after a
+# ~1.5 h query, so writing happens in a job of its own.
 jobs:
-  snapshots:
+  build:
     runs-on: ubuntu-24.04
     timeout-minutes: 300  # ESA's job queue can be slow
+    permissions:
+      contents: read
+    outputs:
+      status: ${{ steps.build.outputs.status }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -61,18 +67,41 @@ jobs:
           echo "status=$?" >> "$GITHUB_OUTPUT"
       - name: Validate snapshots exactly as the site build will
         run: docker-compose run --rm -T web-tools python -c "import sys; sys.path[:0] = ['scripts', 'web']; import build_site; print(len(build_site.check_snapshots(__import__('pathlib').Path('build/snapshots'))), 'snapshots valid')"
+      - name: Package snapshots
+        run: tar -czf snapshots.tar.gz -C build/snapshots .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snapshots
+          path: |
+            snapshots.tar.gz
+            build/snapshots/index.json
+          if-no-files-found: error
+          retention-days: 14  # kept so a failed publish can be retried without re-querying
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write  # create the snapshots release
+      actions: write   # start pages.yml afterwards
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: snapshots
       - name: Publish release
         run: |
           tag="snapshots-$(date -u +%Y%m%d-%H%M)"
-          tar -czf build/snapshots.tar.gz -C build/snapshots .
-          gh release create "$tag" build/snapshots.tar.gz build/snapshots/index.json \
+          gh release create "$tag" snapshots.tar.gz build/snapshots/index.json \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
             --title "Web fallback snapshots $tag" \
             --notes "Saved Gaia DR3 results used by the Show Clusters page when GAVO is unavailable. Built by snapshots.yml (source: ${{ inputs.source }})."
       - name: Redeploy the page with these snapshots
         run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main
       - name: Fail if some clusters are missing (re-run to fill them in)
-        if: steps.build.outputs.status != '0'
+        if: needs.build.outputs.status != '0'
         run: |
           echo "::error::Some clusters failed; the release has the rest. Re-run this workflow to retry only the missing ones."
           exit 1
