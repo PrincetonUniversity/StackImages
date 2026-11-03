@@ -36,14 +36,21 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .controls .actions { margin-top: 12px; }
 .exit { display: none; }
 /* Full screen: the picture and its controls take the whole window (the browser's own full screen
-   too, where allowed). The Exit button has its own band at the top, so it never covers the picture. */
+   too, where allowed). The Exit button has its own band at the top, so it never covers the picture.
+   Neutral black around the picture (a tinted surround shifts how faint stars and the sky's black
+   look) and a dark controls panel (a bright one beside the picture hampers seeing faint stars).
+   Text meets WCAG AA contrast (tested). */
 .viewer.fullscreen { position: fixed; inset: 0; z-index: 1000; margin: 0; padding: 56px 16px 16px;
-                     background: #0b1520; grid-template-columns: minmax(0, 1fr) 260px; overflow: auto; }
+                     background: #000; grid-template-columns: minmax(0, 1fr) 260px; overflow: auto; }
 .viewer.fullscreen #sky { width: min(100%, calc(100dvh - 72px)); }
-.viewer.fullscreen .controls { position: static; background: white; border-radius: 10px; padding: 14px; }
-.viewer.fullscreen .exit { display: inline-block; position: fixed; top: 10px; right: 16px; z-index: 1001;
-                           background: white; color: #174f77; border-color: white; padding: 7px 14px; }
-.viewer.fullscreen .exit .key { color: #536b82; font-size: .85em; }
+.viewer.fullscreen .controls { position: static; background: #16191d; color: #e6edf3; border: 1px solid #2c3238;
+                               border-radius: 10px; padding: 14px; }
+.viewer.fullscreen .controls output, .viewer.fullscreen .controls .credit { color: #aab6c2; }
+.viewer.fullscreen .controls a:not(.download) { color: #8ab4f8; }
+.viewer.fullscreen .controls .secondary, .viewer.fullscreen .exit {
+  background: #22272e; color: #e6edf3; border-color: #3d444d; }
+.viewer.fullscreen .exit { display: inline-block; position: fixed; top: 10px; right: 16px; z-index: 1001; padding: 7px 14px; }
+.viewer.fullscreen .exit .key { color: #aab6c2; font-size: .85em; }
 .viewer.fullscreen #fullscreen, .viewer.fullscreen .controls .hint { display: none; }  /* redundant here */
 body.no-scroll { overflow: hidden; }
 @media (max-aspect-ratio: 1/1) {
