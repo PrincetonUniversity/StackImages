@@ -587,7 +587,13 @@ def hr_arrays(stars: Stars, magnitude_type: str) -> dict[str, np.ndarray]:
     }
 
 
-def hr_png(stars: Stars, magnitude_type: str, title: str, source: str) -> bytes:
+def hr_png(
+    stars: Stars,
+    magnitude_type: str,
+    title: str,
+    source: str,
+    field: tuple[str, str, float, float] = ("", "", 0.0, 0.0),
+) -> bytes:
     import matplotlib
 
     matplotlib.use("Agg")
@@ -612,7 +618,15 @@ def hr_png(stars: Stars, magnitude_type: str, title: str, source: str) -> bytes:
     ax.invert_yaxis()
     fig.text(0.99, 0.01, source, color="0.6", fontsize=8, ha="right", va="bottom")
     out = io.BytesIO()
-    fig.savefig(out, format="png", facecolor="black")
+    metadata = {
+        "Title": f"Show Clusters HR diagram: {title}, {magnitude_type} magnitude",
+        "Source": source,
+        "Copyright": "Gaia DR3 data: ESA/Gaia/DPAC, CC BY-NC 3.0 IGO. "
+        "Bright stars: HYG database v3 (David Nash), CC BY-SA 2.5.",
+        "Software": f"Show Clusters (StackImages), {PAGE_URL}",
+        **(dict(field_entries(title, field)) if field[0] else {}),
+    }
+    fig.savefig(out, format="png", facecolor="black", metadata=metadata)
     return out.getvalue()
 
 
@@ -667,6 +681,57 @@ def _csv_text(comments: list[str], header: list[str], rows: Any) -> bytes:
     return out.getvalue().encode()
 
 
+# The field as the form shows it, under the form's own labels; restored when a file is uploaded.
+FIELD_LABELS = (
+    "Object Catalog Name",
+    "Right Ascension (RA)",
+    "Declination (Dec)",
+    "Field of View (FOV)",
+    "Maximum Magnitude",
+)
+FIELD_PREFIX = "Field: "
+
+
+def field_entries(title: str, field: tuple[str, str, float, float]) -> list[tuple[str, str]]:
+    """(label, value) pairs for the five form inputs; the object name is blank for a custom field."""
+    ra_text, dec_text, fov, maxmag = field
+    name = title if _NAME.match(title) else ""
+    return list(zip(FIELD_LABELS, (name, ra_text, dec_text, f"{fov:g}", f"{maxmag:g}"), strict=True))
+
+
+def field_settings(text: str) -> dict[str, Any] | None:
+    """The five form values from a field record, or None unless every one is valid."""
+    parts = [part.split("=", 1) for part in text.strip().split("; ")]
+    if len(parts) != len(FIELD_LABELS) or any(len(p) != 2 for p in parts):
+        return None
+    if [label for label, _ in parts] != list(FIELD_LABELS):
+        return None
+    name, ra_text, dec_text, fov_text, mag_text = (value.strip() for _, value in parts)
+    try:
+        if name and not _NAME.match(name):
+            return None
+        ra, dec = parse_sexagesimal(ra_text), parse_sexagesimal(dec_text)
+        fov, maxmag = float(fov_text), float(mag_text)
+        validate_query(ra, dec, fov, maxmag)
+    except (InputError, ValueError):
+        return None
+    return {"object": name, "ra": ra_text, "dec": dec_text, "fov": fov, "maxmag": maxmag}
+
+
+def field_from_file(data: bytes) -> dict[str, Any] | None:
+    """The field recorded in a downloaded star-data file's header, if any."""
+    for line in data[:20_000].decode("utf-8", errors="replace").splitlines():
+        if not line.startswith("#"):
+            break
+        if line.startswith("# " + FIELD_PREFIX):
+            return field_settings(line[len("# " + FIELD_PREFIX) :])
+    return None
+
+
+def _field_line(title: str, field: tuple[str, str, float, float]) -> str:
+    return FIELD_PREFIX + "; ".join(f"{label}={value}" for label, value in field_entries(title, field))
+
+
 # "colsat=5; gamma=2; mini=0.0316; maxi=0.1837 (shown as color saturation 5.00, ...)": the exact
 # slider positions (machine-readable, restored on upload), then the values as displayed.
 _SLIDERS = ("colsat", "gamma", "mini", "maxi")
@@ -711,6 +776,7 @@ def star_data_csv(
         raise InputError("The picture settings could not be recorded.")
     comments = [
         f"Show Clusters star data: {title}, RA {ra_text}, Dec {dec_text}, FOV {fov:g} deg, G < {maxmag:g}.",
+        _field_line(title, field),
         *([DISPLAY_PREFIX + display.strip()] if display else []),
         f"Source: {source}; saved {date} from {PAGE_URL}",
         *([GAVO_CREDIT] if "GAVO" in source else []),
@@ -739,9 +805,17 @@ def hr_table(stars: Stars, magnitude_type: str) -> dict[str, np.ndarray]:
     return {"x": x, "y": y, "drawn": drawn}
 
 
-def hr_points_csv(stars: Stars, magnitude_type: str, title: str, source: str, date: str) -> tuple[str, bytes]:
+def hr_points_csv(
+    stars: Stars,
+    magnitude_type: str,
+    title: str,
+    source: str,
+    date: str,
+    field: tuple[str, str, float, float] = ("", "", 0.0, 0.0),
+) -> tuple[str, bytes]:
     table = hr_table(stars, magnitude_type)
     comments = [
+        *([_field_line(title, field)] if field[0] else []),
         f"Show Clusters HR diagram points: {title}, {magnitude_type} magnitude, "
         "one row per star in the picture.",
         f"Source: {source}; saved {date} from {PAGE_URL}",
@@ -949,10 +1023,16 @@ class Session:
         """Download: the HR diagram's points, one row per star in the picture."""
         if self.frame is None:
             raise InputError("Click Show Stars first.")
-        name, data = hr_points_csv(self.frame.stars, magnitude_type, self.title, self.source, date)
+        name, data = hr_points_csv(
+            self.frame.stars, magnitude_type, self.title, self.source, date, self.field_text
+        )
         return {"name": name, "data": data}
 
     def hr_diagram(self, magnitude_type: str) -> bytes:
         if self.frame is None:
             raise InputError("Click Show Stars first.")
-        return hr_png(self.frame.stars, magnitude_type, self.title, self.source)
+        return hr_png(self.frame.stars, magnitude_type, self.title, self.source, self.field_text)
+
+    def file_field(self, data: Any) -> dict[str, Any] | None:
+        """The field recorded in an uploaded star-data file, to fill in the form; None if absent."""
+        return field_from_file(_chunks(data)[0])

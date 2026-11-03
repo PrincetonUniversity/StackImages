@@ -209,3 +209,57 @@ def test_malformed_or_tampered_settings_are_ignored(session: sc.Session, line: s
     assert show(session, tampered, "uploaded", uploaded=True)["display"] is None
     with pytest.raises(sc.InputError, match="could not be recorded"):
         session.star_data("2026-11-03", line)
+
+
+# --- the field (the five form inputs) recorded in the downloads ----------------------------
+
+FIELD_LINE = (
+    "Field: Object Catalog Name=M13; Right Ascension (RA)=+16 : 41 : 42; Declination (Dec)=+36 : 27 : 39; "
+    "Field of View (FOV)=0.2; Maximum Magnitude=16"
+)
+FIELD = {"object": "M13", "ra": "+16 : 41 : 42", "dec": "+36 : 27 : 39", "fov": 0.2, "maxmag": 16.0}
+
+
+def test_field_is_recorded_in_both_csvs_and_read_back(session: sc.Session) -> None:
+    show(session, gavo_bytes())
+    stars = session.star_data("2026-11-03")["data"]
+    points = session.hr_points("Apparent", "2026-11-03")["data"]
+    assert FIELD_LINE in comments(stars) and FIELD_LINE in comments(points)
+    assert sc.field_from_file(stars) == FIELD
+    assert session.file_field(stars) == FIELD
+    assert session.file_field(gavo_bytes()[0]) is None  # a plain GAVO/ESA file has no record
+
+
+def test_hr_png_carries_the_field(session: sc.Session) -> None:
+    from PIL import Image
+
+    show(session, gavo_bytes())
+    text = Image.open(io.BytesIO(session.hr_diagram("Absolute"))).text  # type: ignore[attr-defined]
+    assert text["Object Catalog Name"] == "M13" and text["Right Ascension (RA)"] == "+16 : 41 : 42"
+    assert text["Declination (Dec)"] == "+36 : 27 : 39"
+    assert text["Field of View (FOV)"] == "0.2" and text["Maximum Magnitude"] == "16"
+    assert "Absolute" in text["Title"] and "ESA/Gaia/DPAC" in text["Copyright"]
+
+
+def test_custom_field_has_a_blank_object_name(session: sc.Session) -> None:
+    title = f"RA {RA_TEXT}, Dec {DEC_TEXT}"
+    session.show_stars(gavo_bytes(), "x.csv", GAVO, RA_TEXT, DEC_TEXT, FOV, MAXMAG, title, 0)
+    record = sc.field_from_file(session.star_data("2026-11-03")["data"])
+    assert record is not None and record["object"] == "" and record["ra"] == RA_TEXT
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        FIELD_LINE.replace("+16 : 41 : 42", "+25 : 00 : 00"),  # RA out of range
+        FIELD_LINE.replace("(FOV)=0.2", "(FOV)=9"),  # FOV out of range
+        FIELD_LINE.replace("=M13", "=andromeda"),  # not a catalog name
+        FIELD_LINE.replace("Maximum Magnitude", "Max Mag"),  # wrong label
+        FIELD_LINE.rsplit("; ", 1)[0],  # missing value
+        FIELD_LINE + "; Extra=1",
+    ],
+)
+def test_bad_field_records_are_ignored(text: str) -> None:
+    assert sc.field_settings(text.removeprefix("Field: ")) is None
+    data = f"# {text}\nra,dec,parallax,phot_g_mean_mag,bp_rp,pmra,pmdec\n".encode()
+    assert sc.field_from_file(data) is None

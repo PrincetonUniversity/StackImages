@@ -336,8 +336,28 @@ async function onUseFile() {
   busy = true;
   refresh();
   try {
-    if (!(await lookup())) return;
-    await showStars(new Uint8Array(await file.arrayBuffer()), file.name, `Gaia DR3 from uploaded ESA file (${file.name})`, 0, true);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    // A star-data file from this page records its field: fill in the form from it, so the file is
+    // shown as it was saved whatever the form held. Other files use the form as it is.
+    const recorded = await call("fileField", { bytes });
+    if (recorded) {
+      objectInput.value = recorded.object;
+      raInput.value = recorded.ra;
+      decInput.value = recorded.dec;
+      fovInput.value = String(recorded.fov);
+      maxmagInput.value = String(recorded.maxmag);
+      objectName = recorded.object;
+      showFovArcminutes();
+      await preview();
+    } else if (!(await lookup())) {
+      return;
+    }
+    await showStars(bytes, file.name, `Gaia DR3 from uploaded ESA file (${file.name})`, 0, true);
+    if (recorded) {
+      $("notes").append(Object.assign(document.createElement("li"), {
+        textContent: "Field (object, RA, Dec, field of view, maximum magnitude) filled in from the file.",
+      }));
+    }
   } catch (error) {
     report(error, "This file could not be used");
   } finally {
@@ -551,8 +571,16 @@ function displaySummary() {
 function pictureText() {
   const f = pictureField;
   const field = f ? `${f.title}, RA ${f.ra}, Dec ${f.dec}, FOV ${f.fov} deg, G < ${f.maxmag}` : "";
+  const name = f && /^(M|NGC|IC)\d+$/.test(f.title) ? f.title : "";
   return [
     ["Title", `Show Clusters picture: ${field}`],
+    ...(f ? [
+      ["Object Catalog Name", name],
+      ["Right Ascension (RA)", f.ra],
+      ["Declination (Dec)", f.dec],
+      ["Field of View (FOV)", String(f.fov)],
+      ["Maximum Magnitude", String(f.maxmag)],
+    ] : []),
     ["Description", `Display sliders: ${displaySummary()}`],
     ["Source", f ? f.source : ""],
     ["Copyright", "Gaia DR3 data: ESA/Gaia/DPAC, CC BY-NC 3.0 IGO. Bright stars: HYG database v3 (David Nash), CC BY-SA 2.5."],

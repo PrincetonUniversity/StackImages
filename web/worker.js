@@ -64,6 +64,8 @@ context.onmessage = (/** @type {MessageEvent} */ { data }) => {
     let result;
     if (action === "lookup") {
       result = toJs(session.lookup(args.name));
+    } else if (action === "fileField") {
+      result = toJs(session.file_field(args.bytes)) ?? null;
     } else if (action === "plan") {
       result = toJs(session.plan(args.ra, args.dec, args.fov, args.maxmag));
     } else if (action === "split") {

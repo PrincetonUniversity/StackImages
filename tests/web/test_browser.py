@@ -416,7 +416,11 @@ def test_star_data_download_and_reupload(browser, sites) -> None:  # type: ignor
         "document.getElementById('source').textContent.includes('uploaded')", timeout=60_000
     )
     assert page.text_content("#count") == count == "1,369"
-    assert page.text_content("#notes") == "Picture settings restored from the file."  # the only note
+    notes = page.evaluate("[...document.querySelectorAll('#notes li')].map((li) => li.textContent)")
+    assert notes == [
+        "Picture settings restored from the file.",
+        "Field (object, RA, Dec, field of view, maximum magnitude) filled in from the file.",
+    ]  # and no "only N of M stars inside" warning
     assert page.errors == []  # type: ignore[attr-defined]
     page.close()
 
@@ -734,7 +738,7 @@ def test_picture_png_records_settings_and_credit(browser, sites) -> None:  # typ
         assert zlib.crc32(kind + body) == crc, kind
         chunks.append(kind)
         offset += 12 + length
-    assert chunks[0] == b"IHDR" and chunks[-1] == b"IEND" and chunks.count(b"tEXt") == 5
+    assert chunks[0] == b"IHDR" and chunks[-1] == b"IEND" and chunks.count(b"tEXt") == 10
 
     image = Image.open(info.value.path())
     image.load()  # Pillow also checks the file
@@ -744,4 +748,34 @@ def test_picture_png_records_settings_and_credit(browser, sites) -> None:  # typ
     assert text["Title"].startswith("Show Clusters picture: M13, RA +16 : 41 : 42")
     assert text["Source"] == "Gaia DR3 via GAVO"
     assert "ESA/Gaia/DPAC" in text["Copyright"] and "HYG" in text["Copyright"]
+    assert text["Object Catalog Name"] == "M13" and text["Right Ascension (RA)"] == "+16 : 41 : 42"
+    assert text["Declination (Dec)"] == "+36 : 27 : 39"
+    assert text["Field of View (FOV)"] == "0.2" and text["Maximum Magnitude"] == "16"
     page.close()
+
+
+def test_uploading_star_data_fills_in_the_field(browser, sites, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    enter_m13(page)
+    page.click("#show-stars")
+    stars_shown(page)
+    with page.expect_download() as info:
+        page.click("#data-download")
+    path = tmp_path / info.value.suggested_filename
+    info.value.save_as(path)
+    page.close()
+
+    fresh = open_page(browser, sites["without"], gavo_ok([]))  # nothing typed in: RA/Dec 0, FOV 0.3, G 16
+    fresh.evaluate("document.getElementById('upload').open = true")
+    fresh.set_input_files("#file", str(path))
+    fresh.click("#use-file")
+    fresh.wait_for_function(
+        "document.getElementById('source').textContent.includes('uploaded')", timeout=60_000
+    )
+    form = [fresh.input_value(f"#{i}") for i in ("object", "ra", "dec", "fov", "maxmag")]
+    assert form == ["M13", "+16 : 41 : 42", "+36 : 27 : 39", "0.2", "16"]
+    assert fresh.text_content("#fov-unit") == "degrees (12 arcminutes)"
+    assert fresh.text_content("#count") == "1,369"
+    assert "filled in from the file" in (fresh.text_content("#notes") or "")
+    assert fresh.errors == []  # type: ignore[attr-defined]
+    fresh.close()
