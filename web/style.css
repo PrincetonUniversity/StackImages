@@ -14,6 +14,8 @@ input, select { font: inherit; padding: 7px 9px; border: 1px solid #b9c8d6; bord
 #object, #ra, #dec { width: 11.5em; }
 #fov, #maxmag { width: 7em; }
 label.inline { font-weight: 600; }
+.lookup { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+button.small { padding: 7px 12px; }
 .hint, footer { color: #536b82; font-size: .88rem; }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; align-items: center; }
 button, .download { display: inline-block; border: 1px solid #174f77; border-radius: 7px; padding: 10px 16px; background: #174f77; color: white; font: inherit; text-decoration: none; cursor: pointer; }

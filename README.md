@@ -131,7 +131,7 @@ Show Clusters in the browser
 https://princetonuniversity.github.io/StackImages/ShowClusters/ runs ShowClusters in any modern browser
 (Chrome, Edge, Firefox, Safari) on macOS, Windows, Linux or a Chromebook:
 
-1. Type an object (`m13`, `NGC5466`, `IC4665`) and press Enter; RA and Dec fill in.
+1. Type an object (`m13`, `NGC5466`, `IC4665`) and click **Look up** (or press Enter); RA and Dec fill in.
 2. Set the field of view and maximum magnitude, then click **Show Stars**.
 3. Adjust the picture with the sliders; choose Apparent or Absolute and click **HR Diagram**.
 4. Use **Download HR diagram (PNG)** to save it.

@@ -71,7 +71,7 @@ context.onmessage = (/** @type {MessageEvent} */ { data }) => {
     } else if (action === "showStars") {
       const py = session.show_stars(
         args.bytes, args.filename, args.source, args.ra, args.dec, args.fov, args.maxmag,
-        args.title, args.maxRows,
+        args.title, args.maxRows, Boolean(args.uploaded),
       );
       result = toJs(py);
       context.postMessage({ id, ok: true, result }, [result.image.buffer]);
