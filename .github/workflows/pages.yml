@@ -80,7 +80,11 @@ jobs:
           path: build/vendor
           key: pyodide-${{ hashFiles('scripts/vendor_pyodide.py') }}
       - name: Download and verify Pyodide
-        run: docker-compose run --rm -T web-tools python scripts/vendor_pyodide.py
+        # build/ is created here, as the runner user: if the root container created it
+        # (on a cache miss), later steps could not write the snapshots into it.
+        run: |
+          mkdir -p build/vendor
+          docker-compose run --rm -T web-tools python scripts/vendor_pyodide.py
       - name: Unit, snapshot and browser tests
         run: docker-compose run --rm -T web-tools python -m pytest -v -p no:cacheprovider tests/web
       - name: Fetch saved snapshots (latest snapshots-* release)
