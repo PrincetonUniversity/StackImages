@@ -43,19 +43,45 @@ jobs:
 
   create-release:
     needs: test-and-package
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: PyWin
           path: dist
-      - name: Create GitHub release with PyWin.tar
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Install zsh
+        run: sudo apt-get update -q && sudo apt-get install -y -q zsh
+      - name: Decide the version (v<ass.py version>.<n>; skip if the bundle is unchanged)
+        id: version
         run: |
-          gh release create "v-${GITHUB_SHA}" dist/PyWin.tar \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Release ${GITHUB_SHA}" --notes "Desktop bundle built from ${GITHUB_SHA}."
+          app=$(scripts/package_pywin.sh --app-version)
+          fingerprint=$(scripts/package_pywin.sh --fingerprint)
+          gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --slurp > releases.json
+          tag=$(python3 scripts/next_release.py --app-version "$app" --fingerprint "$fingerprint" --releases releases.json)
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [ -z "$tag" ]; then
+            echo "::notice::PyWin.tar's app and data files are unchanged since the last release; no new release."
+          else
+            echo "Next release: $tag"
+          fi
+      - name: Create GitHub release with PyWin.tar
+        if: steps.version.outputs.tag != ''
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          gh release create "$tag" dist/PyWin.tar \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+            --title "StackImages ${tag#v}" \
+            --notes "Desktop StackImages bundle (\`PyWin.tar\`): ass.py version ${{ steps.version.outputs.app }}, built from ${GITHUB_SHA}.
+
+          Install or update: see the README (https://github.com/$GITHUB_REPOSITORY#readme).
+          Try ShowClusters in the browser: https://princetonuniversity.github.io/StackImages/ShowClusters/
+
+          Bundle fingerprint: ${{ steps.version.outputs.fingerprint }}"

@@ -159,6 +159,9 @@ Notes
 -----
 - The distributed release artifact produced by CI is named `PyWin.tar` to match legacy expectations.
   It is built by `scripts/package_pywin.sh` and contains only the desktop app and its data under `PyWin/`.
+- Releases are versioned `v<ass.py version>.<n>` (e.g. `v21.0`, `v21.1`; a new `version = N` in `ass.py` starts
+  `vN.0`). CI publishes one only when the app or data files in `PyWin.tar` changed since the last release;
+  README/LICENSE edits alone don't trigger one. Run CI (desktop) manually on `main` to release on demand.
 - Maintainers: run the desktop tests locally with `docker-compose run --rm desktop-tests`.
   `environment.yml` and `ci/conda-linux-64.lock` define the CI environment; regenerate the lock with `scripts/lock_conda_env.sh`.
 - CI: `ci.yml` (desktop app, `PyWin.tar`), `pages.yml` (web page) and `snapshots.yml` (web fallback data) are
