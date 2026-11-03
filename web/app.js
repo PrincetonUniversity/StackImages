@@ -32,6 +32,7 @@ const starsEmpty = $("stars-empty");
 const canvas = /** @type {HTMLCanvasElement} */ ($("sky"));
 const magtype = /** @type {HTMLSelectElement} */ ($("magtype"));
 const hrButton = /** @type {HTMLButtonElement} */ ($("hr-button"));
+const resetButton = /** @type {HTMLButtonElement} */ ($("reset-sliders"));
 const hrImage = /** @type {HTMLImageElement} */ ($("hr"));
 const hrDownload = /** @type {HTMLAnchorElement} */ ($("hr-download"));
 const hrDownloads = $("hr-downloads");
@@ -80,7 +81,7 @@ function startWorker() {
   worker.onmessage = ({ data }) => {
     if (data.type === "ready") {
       ready = true;
-      setStatus("Ready. Type an object name such as m13 and press Enter.");
+      setStatus("Ready. Type an object name such as m13, then click Look up (or press Enter).");
       refresh();
       return;
     }
@@ -128,6 +129,7 @@ function refresh() {
   lookupButton.disabled = !ready || busy;
   useFile.disabled = !ready || busy || !fileInput.files?.length;
   hrButton.disabled = !ready || busy || !picture;
+  resetButton.disabled = !picture;
   copyButton.disabled = !adql.dataset.query;
 }
 /** @param {unknown} error @param {string} fallback */
@@ -362,6 +364,8 @@ function displayStars(result, source) {
   sliders.maxi.value = String(Math.sqrt(result.pct_hi));
   sliders.colsat.value = "5";
   sliders.gamma.value = "2";
+  // Remember where the sliders started (as slidershow in ass.py starts them), for Reset.
+  initialSliders = Object.fromEntries(Object.entries(sliders).map(([name, slider]) => [name, slider.value]));
   magtype.value = "Apparent"; // ass.py resets the magnitude type on Show Stars
   hrImage.hidden = true;
   hrDownloads.hidden = true;
@@ -421,6 +425,16 @@ function draw() {
     out[p * 4 + 3] = 255;
   }
   /** @type {CanvasRenderingContext2D} */ (canvas.getContext("2d")).putImageData(image, 0, 0);
+}
+
+/** @type {Record<string, string>} */
+let initialSliders = {};
+
+function resetSliders() {
+  for (const [name, slider] of Object.entries(sliders)) {
+    if (name in initialSliders) slider.value = initialSliders[name];
+  }
+  draw();
 }
 
 let drawQueued = false;
@@ -524,6 +538,7 @@ form.addEventListener("submit", (event) => {
   void onShowStars();
 });
 for (const slider of Object.values(sliders)) slider.addEventListener("input", queueDraw);
+resetButton.addEventListener("click", resetSliders);
 hrButton.addEventListener("click", () => void onHrDiagram());
 dataDownload.addEventListener("click", (event) => {
   event.preventDefault();

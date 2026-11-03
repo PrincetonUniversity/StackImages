@@ -15,7 +15,7 @@
       <p class="eyebrow"><a href="../">StackImages</a> · Show Clusters</p>
       <h1>Show Clusters with Gaia Data</h1>
       <p class="intro">Look up a star cluster, see its stars as Gaia measured them, and draw its
-        Hertzsprung–Russell diagram. Everything runs in this browser tab; nothing to install.</p>
+        Hertzsprung–Russell diagram.</p>
     </header>
 
     <section class="panel" aria-labelledby="field-heading">
@@ -46,6 +46,23 @@
       <p id="error" role="alert" hidden></p>
       <details id="load-details" hidden><summary>Loading details</summary><pre id="load-error"></pre></details>
       <button id="retry" class="secondary" type="button" hidden>Reload tool</button>
+      <details id="upload" class="upload">
+        <summary id="upload-heading">Or use a file from the ESA Gaia archive</summary>
+        <p>If the live data source is unavailable, or you want ESA's own copy of Gaia DR3:</p>
+        <ol>
+          <li>Fill in the field above (object, FOV, maximum magnitude).</li>
+          <li>Copy this query, open the <a href="https://gea.esac.esa.int/archive/" target="_blank" rel="noopener">ESA Gaia archive</a>,
+            choose <em>Search → Advanced (ADQL)</em>, paste it and submit.</li>
+          <li>Download the result as CSV, VOTable or FITS, and choose that file below.</li>
+        </ol>
+        <pre id="adql">Fill in the field above to see the query.</pre>
+        <div class="actions">
+          <button id="copy-adql" type="button" class="secondary" disabled>Copy query</button>
+        </div>
+        <label for="file">Gaia result file <span class="hint">(.csv, .vot, .xml, .fits; up to 50 MB)</span></label>
+        <input id="file" type="file" accept=".csv,.vot,.votable,.xml,.fits,.fit,.fts">
+        <div class="actions"><button id="use-file" type="button" disabled>Show Stars from this file</button></div>
+      </details>
     </section>
 
     <section id="stars-panel" class="panel" aria-labelledby="stars-heading">
@@ -58,27 +75,34 @@
         <dt>Data</dt><dd id="source"></dd>
       </dl>
       <ul id="notes" class="notes"></ul>
-      <canvas id="sky" width="1200" height="1200" aria-label="Simulated view of the stars in the field"></canvas>
-      <div class="sliders">
-        <label for="colsat">color saturation</label>
-        <output id="colsat-value" for="colsat"></output>
-        <input id="colsat" type="range" min="-1" max="10" step="0.05" value="5">
-        <label for="gamma">nonlinear stretch</label>
-        <output id="gamma-value" for="gamma"></output>
-        <input id="gamma" type="range" min="0" max="10" step="0.05" value="2">
-        <label for="mini">min</label>
-        <output id="mini-value" for="mini"></output>
-        <input id="mini" type="range" step="any">
-        <label for="maxi">max</label>
-        <output id="maxi-value" for="maxi"></output>
-        <input id="maxi" type="range" step="any">
+      <div class="viewer">
+        <canvas id="sky" width="1200" height="1200" aria-label="Simulated view of the stars in the field"></canvas>
+        <div class="controls">
+          <div class="sliders">
+            <label for="colsat">color saturation</label>
+            <output id="colsat-value" for="colsat"></output>
+            <input id="colsat" type="range" min="-1" max="10" step="0.05" value="5">
+            <label for="gamma">nonlinear stretch</label>
+            <output id="gamma-value" for="gamma"></output>
+            <input id="gamma" type="range" min="0" max="10" step="0.05" value="2">
+            <label for="mini">min</label>
+            <output id="mini-value" for="mini"></output>
+            <input id="mini" type="range" step="any">
+            <label for="maxi">max</label>
+            <output id="maxi-value" for="maxi"></output>
+            <input id="maxi" type="range" step="any">
+          </div>
+          <div class="actions">
+            <button id="reset-sliders" type="button" class="secondary small" disabled>Reset sliders</button>
+          </div>
+          <div class="actions">
+            <a id="sky-download" class="download secondary" href="#">Download picture (PNG)</a>
+            <a id="data-download" class="download secondary" href="#">Download star data (CSV)</a>
+          </div>
+          <p class="hint">The star data file can be uploaded again (step 1, “Or use a file…”) to reproduce this result.</p>
+          <p class="credit">Star data: ESA/Gaia/DPAC, <a href="https://www.cosmos.esa.int/web/gaia-users/license" target="_blank" rel="noopener">CC BY-NC 3.0 IGO</a>. Each CSV file lists the full credit and how to cite Gaia.</p>
+        </div>
       </div>
-      <div class="actions">
-        <a id="sky-download" class="download secondary" href="#">Download picture (PNG)</a>
-        <a id="data-download" class="download secondary" href="#">Download star data (CSV)</a>
-      </div>
-      <p class="hint">The star data file can be uploaded again (bottom of the page) to reproduce this result.</p>
-      <p class="credit">Star data: ESA/Gaia/DPAC, <a href="https://www.cosmos.esa.int/web/gaia-users/license" target="_blank" rel="noopener">CC BY-NC 3.0 IGO</a>. Each CSV file lists the full credit and how to cite Gaia.</p>
       </div>
     </section>
 
@@ -99,26 +123,6 @@
         <a href="https://www.cosmos.esa.int/web/gaia-users/license" target="_blank" rel="noopener">CC BY-NC 3.0 IGO</a>;
         bright stars: HYG database v3 by David Nash,
         <a href="https://creativecommons.org/licenses/by-sa/2.5/" target="_blank" rel="noopener">CC BY-SA 2.5</a>.</p>
-    </section>
-
-    <section class="panel" aria-labelledby="upload-heading">
-      <details id="upload">
-        <summary id="upload-heading">Use a file from the ESA Gaia archive instead</summary>
-        <p>If the live data source is unavailable, or you want ESA's own copy of Gaia DR3:</p>
-        <ol>
-          <li>Fill in the field above (object, FOV, maximum magnitude).</li>
-          <li>Copy this query, open the <a href="https://gea.esac.esa.int/archive/" target="_blank" rel="noopener">ESA Gaia archive</a>,
-            choose <em>Search → Advanced (ADQL)</em>, paste it and submit.</li>
-          <li>Download the result as CSV, VOTable or FITS, and choose that file below.</li>
-        </ol>
-        <pre id="adql">Fill in the field above to see the query.</pre>
-        <div class="actions">
-          <button id="copy-adql" type="button" class="secondary" disabled>Copy query</button>
-        </div>
-        <label for="file">Gaia result file <span class="hint">(.csv, .vot, .xml, .fits; up to 50 MB)</span></label>
-        <input id="file" type="file" accept=".csv,.vot,.votable,.xml,.fits,.fit,.fts">
-        <div class="actions"><button id="use-file" type="button" disabled>Show Stars from this file</button></div>
-      </details>
     </section>
 
     <footer>
