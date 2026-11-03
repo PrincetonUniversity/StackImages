@@ -148,6 +148,11 @@ app, workflows, local development, troubleshooting): [docs/WEB.md](docs/WEB.md).
 The site root, https://princetonuniversity.github.io/StackImages/, is a short StackImages home page
 linking to Show Clusters and to the desktop app.
 
+To host a copy on another web site, download
+https://princetonuniversity.github.io/StackImages/StackImages-web.zip, unzip it, and upload the
+`StackImages` folder unchanged. Its `HOSTING.txt` lists the two content types the server must send
+(see "Hosting a copy elsewhere" in [docs/WEB.md](docs/WEB.md)).
+
 Quick local run (Docker only):
 
 ```bash

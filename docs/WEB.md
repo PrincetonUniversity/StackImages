@@ -195,7 +195,7 @@ Small differences are still possible in these cases:
 | Workflow | Runs on | Does |
 |---|---|---|
 | `ci.yml` (desktop) | push/PR to `main`, except web-only files; manual | Desktop GUI tests under Xvfb, equivalence test, packaging tests in `ci/desktop-tests.Dockerfile`; builds `PyWin.tar`; on `main`, publishes release `v<ass.py version>.<n>` when the bundle's app/data files changed (`scripts/next_release.py`) |
-| `pages.yml` (web) | push/PR touching the web files; manual | eslint + tsc (Node container), ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`), verified Pyodide download, site build with the latest snapshots; deploys on `main` |
+| `pages.yml` (web) | push/PR touching the web files; manual | eslint + tsc (Node container), ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`), verified Pyodide download, site build with the latest snapshots, `StackImages-web.zip` of the site; deploys on `main` |
 | `snapshots.yml` | manual only | Fetches ~75 clusters (`scripts/build_snapshots.py`: GAVO in pieces, ESA as fallback, lower magnitude limit if both fail), validates, publishes a `snapshots-*` release, redeploys the page. Resumes from the last release; re-run to fill gaps |
 
 Nothing generated is committed: Pyodide (`build/vendor/`), the site (`_site/`) and
@@ -224,6 +224,41 @@ scripts/run_web.sh --snapshots build/snapshots
 Without Docker, a `.venv` works too: `uv venv --python 3.13 .venv && uv pip install
 --python .venv/bin/python -r requirements-web.lock`, then the same `python …` commands.
 
+## Hosting a copy elsewhere
+
+Every deploy also publishes the whole site as one zip:
+https://princetonuniversity.github.io/StackImages/StackImages-web.zip
+(`scripts/zip_site.py`, run by `pages.yml` after the site build). Unzipped, it is a
+`StackImages/` folder: the home page, `ShowClusters/` with Pyodide and the saved
+snapshots, and `HOSTING.txt` with these instructions. Copy the folder unchanged into
+any directory of a static web site. All links are relative, so it works from a
+subdirectory such as `/~rvdb/StackImages/`.
+
+The host must send two content types:
+
+| File | Content type |
+|---|---|
+| `.mjs` | `text/javascript` (`application/javascript` also works) |
+| `.wasm` | `application/wasm` |
+
+Browsers refuse these files when they're sent as `application/octet-stream`, the
+usual default for an unknown extension. Before loading Pyodide, the page checks
+both files and, if either type is wrong, names the file and the type to fix.
+
+`test_site_zip.py` serves the unzipped copy the way vanderbei.princeton.edu does,
+using its headers saved in `tests/web/fixtures/personal_site_headers.json`:
+
+- `nosniff` and its Content-Security-Policy;
+- its content types;
+- `application/octet-stream` for anything unmapped.
+
+Its CSP permits `data:` images but not `blob:` ones, so the HR diagram is shown
+through a `data:` URL.
+
+On that site, `.mjs` and `.wasm` need entries in the upload map
+(`config/azcopy-mime.json` in vanderbei-deploy), and the nginx server it replaces
+needs them too.
+
 ## Limits and safeguards
 
 - Inputs are validated before any query: object names must look like `m13`, `ngc5466` or
@@ -241,6 +276,7 @@ Without Docker, a `.venv` works too: `uv venv --python 3.13 .venv && uv pip inst
 | "The live Gaia data source is unavailable…" | GAVO is down or slow. Saved copies cover common clusters; otherwise use an ESA file (bottom of the page). |
 | "This field has too many stars for the live data source…" | A wide or Milky-Way-dense field even GAVO's smallest pieces can't answer in time. Lower the FOV or Maximum Magnitude, or use an ESA file. |
 | Page stuck on "Loading Python…" | First visit downloads ~35 MB. On failure, "Reload tool" appears with details. |
+| "This web server sends vendor/pyodide.mjs as …" | A copy hosted elsewhere with the wrong content types; see "Hosting a copy elsewhere". |
 | "The Python worker stopped" | Browser ran out of memory; use a smaller field or magnitude limit. |
 | `pages.yml` warns "No snapshots-* release yet" | Run `snapshots.yml` once (Actions → Snapshots → Run workflow). |
 | `ci.yml` fails in `test_web_equivalence.py` | `ass.py` and the port disagree; see "When Bob sends a new `ass.py`". |
