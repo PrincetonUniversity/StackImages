@@ -23,8 +23,12 @@
       <form id="field" novalidate>
         <div class="grid">
           <label for="object">Object Catalog Name</label>
-          <div><input id="object" autocomplete="off" spellcheck="false" placeholder="m13, NGC5466">
-            <span class="hint">Press Enter to look it up.</span></div>
+          <div class="lookup">
+            <input id="object" autocomplete="off" spellcheck="false" placeholder="m13, NGC5466"
+                   aria-describedby="object-hint">
+            <button id="lookup" type="button" class="secondary small" disabled>Look up</button>
+            <span id="object-hint" class="hint">Fills in RA and Dec; pressing Enter also works.</span>
+          </div>
           <label for="ra">Right Ascension (RA)</label>
           <div><input id="ra" value="+00 : 00 : 00" spellcheck="false"> <span class="hint">h : m : s</span></div>
           <label for="dec">Declination (Dec)</label>

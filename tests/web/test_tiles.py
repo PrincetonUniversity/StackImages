@@ -189,3 +189,17 @@ def test_pieces_give_exactly_the_one_query_result(
         for key, values in arrays.items():
             np.testing.assert_array_equal(split["hr"][mode][key], values, err_msg=f"{mode} {key}")
     assert split["png"] == whole["png"]  # the downloaded HR diagram, byte for byte
+
+
+@pytest.mark.parametrize("uploaded", [True, False])
+def test_outside_note_only_for_uploaded_files(session: sc.Session, uploaded: bool) -> None:
+    data = (Path(__file__).parent / "fixtures" / "m13_esa.csv").read_bytes()
+    # A field centred 22 s of RA away from the file's centre: only ~40% of its stars are inside.
+    result = session.show_stars(
+        data, "m13.csv", "test", "+16 : 41 : 20", DEC_TEXT, 0.1, MAXMAG, "M13", 0, uploaded
+    )
+    notes = result["notes"]
+    if uploaded:
+        assert notes == ["Only 604 of 1,498 stars in the file are inside the field."]
+    else:
+        assert notes == []

@@ -247,6 +247,33 @@ def test_upload_esa_file_when_gavo_is_down(browser, sites, fixture: str) -> None
     page.close()
 
 
+def test_lookup_button_fills_in_coordinates(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    button = page.get_by_role("button", name="Look up")
+    assert button.is_enabled()
+    assert page.get_attribute("#object", "aria-describedby") == "object-hint"
+    page.fill("#object", "ngc5466")
+    button.click()
+    page.wait_for_function("document.getElementById('ra').value !== '+00 : 00 : 00'")
+    assert page.input_value("#ra").startswith("+14 : 05")
+    assert "Found NGC5466" in (page.text_content("#status") or "")
+    page.focus("#object")  # keyboard: Tab from the box reaches the button
+    page.keyboard.press("Tab")
+    assert page.evaluate("document.activeElement.id") == "lookup"
+    page.close()
+
+
+def test_split_download_has_no_outside_note(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    from fakegaia import FakeGaia
+
+    page = open_page(browser, sites["without"], fake_gavo(FakeGaia(timeout_radius=0.06)))
+    enter_m13(page)
+    page.click("#show-stars")
+    page.wait_for_function("!document.getElementById('stars-content').hidden", timeout=90_000)
+    assert page.text_content("#notes") == ""  # pieces overhang the field by design
+    page.close()
+
+
 def test_bad_inputs_show_messages(browser, sites, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     page = open_page(browser, sites["without"], gavo_ok([]))
     page.fill("#object", "andromeda")

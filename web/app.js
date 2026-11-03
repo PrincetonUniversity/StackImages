@@ -18,6 +18,7 @@ function $(id) {
 
 const form = /** @type {HTMLFormElement} */ ($("field"));
 const objectInput = /** @type {HTMLInputElement} */ ($("object"));
+const lookupButton = /** @type {HTMLButtonElement} */ ($("lookup"));
 const raInput = /** @type {HTMLInputElement} */ ($("ra"));
 const decInput = /** @type {HTMLInputElement} */ ($("dec"));
 const fovInput = /** @type {HTMLInputElement} */ ($("fov"));
@@ -120,6 +121,7 @@ function clearError() {
 }
 function refresh() {
   showButton.disabled = !ready || busy;
+  lookupButton.disabled = !ready || busy;
   useFile.disabled = !ready || busy || !fileInput.files?.length;
   hrButton.disabled = !ready || busy || !picture;
   copyButton.disabled = !adql.dataset.query;
@@ -152,6 +154,7 @@ async function lookup() {
     decInput.value = found.dec;
     objectName = found.name;
     clearError();
+    setStatus(`Found ${found.name}: RA ${found.ra}, Dec ${found.dec}.`);
     await preview();
     return true;
   } catch (error) {
@@ -249,14 +252,15 @@ async function savedCopy(name, field) {
 /**
  * @param {Uint8Array | Uint8Array[]} bytes one result, or one per piece of a large field
  * @param {string} filename @param {string} source @param {number} maxRows
+ * @param {boolean} [uploaded] a student's file: warn if it is mostly outside the field
  */
-async function showStars(bytes, filename, source, maxRows) {
+async function showStars(bytes, filename, source, maxRows, uploaded = false) {
   const field = fieldArgs();
   const title = objectName || `RA ${field.ra}, Dec ${field.dec}`;
   setStatus("Placing the stars and drawing the picture…");
   const result = await call(
     "showStars",
-    { bytes, filename, source, title, maxRows, ...field },
+    { bytes, filename, source, title, maxRows, uploaded, ...field },
   );
   displayStars(result, source);
   setStatus(`Plotted ${result.count.toLocaleString()} stars. Adjust the sliders, or click HR Diagram.`);
@@ -320,7 +324,7 @@ async function onUseFile() {
   refresh();
   try {
     if (!(await lookup())) return;
-    await showStars(new Uint8Array(await file.arrayBuffer()), file.name, `Gaia DR3 from uploaded ESA file (${file.name})`, 0);
+    await showStars(new Uint8Array(await file.arrayBuffer()), file.name, `Gaia DR3 from uploaded ESA file (${file.name})`, 0, true);
   } catch (error) {
     report(error, "This file could not be used");
   } finally {
@@ -479,6 +483,7 @@ form.addEventListener("submit", (event) => {
 });
 for (const slider of Object.values(sliders)) slider.addEventListener("input", queueDraw);
 hrButton.addEventListener("click", () => void onHrDiagram());
+lookupButton.addEventListener("click", () => void lookup());
 fileInput.addEventListener("change", refresh);
 useFile.addEventListener("click", () => void onUseFile());
 copyButton.addEventListener("click", async () => {

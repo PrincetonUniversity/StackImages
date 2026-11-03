@@ -713,6 +713,7 @@ class Session:
         maxmag: float,
         title: str,
         max_rows: int = 0,
+        uploaded: bool = False,
     ) -> dict[str, Any]:
         """Show Stars: select, frame and render. Returns numbers + display image bytes."""
         self.frame = None
@@ -733,7 +734,9 @@ class Session:
                 "None of the stars in this file are inside the requested field. "
                 "Was it downloaded for a different object or field of view?"
             )
-        if rows and inside.mean() < 0.5:
+        # Saved copies and split downloads deliberately cover more than the field; only an
+        # uploaded file that is mostly outside it suggests the wrong object or settings.
+        if uploaded and rows and inside.mean() < 0.5:
             notes.append(f"Only {int(inside.sum()):,} of {rows:,} stars in the file are inside the field.")
         gaia = canonical({name: values[inside] for name, values in gaia.items()})
         stars = select_stars(gaia, self.bright, query["ra"], query["dec"], fov)
