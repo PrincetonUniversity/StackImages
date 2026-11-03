@@ -7,9 +7,6 @@ StackImages is a Python script and graphical interface for astrophotography imag
 ShowClusters tool (Gaia star fields and HR diagrams) with nothing to install. See
 [Show Clusters in the browser](#show-clusters-in-the-browser) below.
 
-This README includes installation and usage instructions adapted from the project's documentation:
-https://orfe.io/stackimg.html
-
 macOS installation (copy-paste into Terminal)
 --------------------------------------------
 1. Download and extract StackImages:
@@ -166,4 +163,3 @@ Notes
   `environment.yml` and `ci/conda-linux-64.lock` define the CI environment; regenerate the lock with `scripts/lock_conda_env.sh`.
 - CI: `ci.yml` (desktop app, `PyWin.tar`), `pages.yml` (web page) and `snapshots.yml` (web fallback data) are
   independent workflows; see [docs/WEB.md](docs/WEB.md#workflows).
-- This README text is adapted from https://orfe.io/stackimg.html. For the latest instructions or additional details, see that page.
