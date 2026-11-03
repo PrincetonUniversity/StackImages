@@ -163,3 +163,49 @@ def test_custom_fields_get_a_generic_file_name(session: sc.Session) -> None:
         gavo_bytes(), "x.csv", GAVO, RA_TEXT, DEC_TEXT, FOV, MAXMAG, "RA +16 : 41 : 42, Dec x", 0
     )
     assert session.star_data("2026-11-03")["name"].startswith("field_FOV0.2_G16_GAVO_")
+
+
+# --- picture settings recorded in the star data -------------------------------------------
+
+DISPLAY = (
+    "colsat=7.25; gamma=3.5; mini=0.04123105625617661; maxi=0.15 "
+    "(shown as color saturation 7.25, nonlinear stretch 44.77, min 0.0017, max 0.0225)"
+)
+
+
+def test_star_data_records_and_restores_the_slider_positions(session: sc.Session) -> None:
+    show(session, gavo_bytes())
+    data = session.star_data("2026-11-03", DISPLAY)["data"]
+    assert f"Display sliders: {DISPLAY}" in comments(data)
+    expected = {"colsat": "7.25", "gamma": "3.5", "mini": "0.04123105625617661", "maxi": "0.15"}
+    assert sc.display_from_file(data) == expected
+    assert show(session, data, "uploaded", uploaded=True)["display"] == expected
+    assert show(session, data, "saved copy", uploaded=False)["display"] is None  # only student uploads
+
+
+def test_star_data_without_settings_still_works(session: sc.Session) -> None:
+    show(session, gavo_bytes())
+    data = session.star_data("2026-11-03")["data"]
+    assert not any(line.startswith("Display sliders") for line in comments(data))
+    assert show(session, data, "uploaded", uploaded=True)["display"] is None
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "colsat=5; gamma=2; mini=x; maxi=1",
+        "colsat=5; gamma=2",
+        "colsat=5; gamma=2; mini=0.1; maxi=0.2; extra=1",
+        "colsat=5; gamma=2; mini=0.1; maxi=0.2</script><script>alert(1)",
+        "colsat=nan; gamma=2; mini=0.1; maxi=0.2",
+        "colsat=1e999; gamma=2; mini=0.1; maxi=0.2",
+    ],
+)
+def test_malformed_or_tampered_settings_are_ignored(session: sc.Session, line: str) -> None:
+    assert sc.display_settings(line) is None
+    show(session, gavo_bytes())
+    data = session.star_data("2026-11-03")["data"]
+    tampered = data.replace(b"# Show Clusters", f"# Display sliders: {line}\n# Show Clusters".encode(), 1)
+    assert show(session, tampered, "uploaded", uploaded=True)["display"] is None
+    with pytest.raises(sc.InputError, match="could not be recorded"):
+        session.star_data("2026-11-03", line)

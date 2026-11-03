@@ -667,13 +667,51 @@ def _csv_text(comments: list[str], header: list[str], rows: Any) -> bytes:
     return out.getvalue().encode()
 
 
+# "colsat=5; gamma=2; mini=0.0316; maxi=0.1837 (shown as color saturation 5.00, ...)": the exact
+# slider positions (machine-readable, restored on upload), then the values as displayed.
+_SLIDERS = ("colsat", "gamma", "mini", "maxi")
+_NUMBER = r"-?\d+(?:\.\d+)?(?:e-?\d+)?"
+_DISPLAY = re.compile(
+    "^"
+    + "; ".join(f"{name}=(?P<{name}>{_NUMBER})" for name in _SLIDERS)
+    + r"(?: \(shown as [^()\n]{0,200}\))?$"
+)
+DISPLAY_PREFIX = "Display sliders: "
+
+
+def display_settings(text: str) -> dict[str, str] | None:
+    """Slider positions from a display description, or None if it is not exactly that."""
+    match = _DISPLAY.match(text.strip())
+    if not match or not all(math.isfinite(float(match[name])) for name in _SLIDERS):
+        return None
+    return {name: match[name] for name in _SLIDERS}
+
+
+def display_from_file(data: bytes) -> dict[str, str] | None:
+    """The slider positions recorded in a downloaded star-data file's header, if any."""
+    for line in data[:20_000].decode("utf-8", errors="replace").splitlines():
+        if not line.startswith("#"):
+            break
+        if line.startswith("# " + DISPLAY_PREFIX):
+            return display_settings(line[len("# " + DISPLAY_PREFIX) :])
+    return None
+
+
 def star_data_csv(
-    gaia: dict[str, np.ndarray], title: str, field: tuple[str, str, float, float], source: str, date: str
+    gaia: dict[str, np.ndarray],
+    title: str,
+    field: tuple[str, str, float, float],
+    source: str,
+    date: str,
+    display: str = "",
 ) -> tuple[str, bytes]:
     """The field's Gaia rows as used, in ESA's columns; uploading it reproduces the result."""
     ra_text, dec_text, fov, maxmag = field
+    if display and display_settings(display) is None:
+        raise InputError("The picture settings could not be recorded.")
     comments = [
         f"Show Clusters star data: {title}, RA {ra_text}, Dec {dec_text}, FOV {fov:g} deg, G < {maxmag:g}.",
+        *([DISPLAY_PREFIX + display.strip()] if display else []),
         f"Source: {source}; saved {date} from {PAGE_URL}",
         *([GAVO_CREDIT] if "GAVO" in source else []),
         *GAIA_CREDIT,
@@ -858,7 +896,9 @@ class Session:
         """Show Stars: select, frame and render. Returns numbers + display image bytes."""
         self.frame = None
         query = self.plan(ra_text, dec_text, fov, maxmag)
-        parts = [parse_gaia_table(chunk, filename) for chunk in _chunks(data)]
+        chunks = _chunks(data)
+        parts = [parse_gaia_table(chunk, filename) for chunk in chunks]
+        display = display_from_file(chunks[0]) if uploaded and len(chunks) == 1 else None
         notes: list[str] = []
         if max_rows and any(len(part["ra"]) >= max_rows for part in parts):
             notes.append(f"The server stopped at {max_rows:,} stars; use a smaller field or magnitude limit.")
@@ -891,17 +931,18 @@ class Session:
             "brightest": None if math.isnan(frame.brightest) else round(frame.brightest, 2),
             "rows": rows,
             "notes": notes,
+            "display": display,
             "size": RENDER_SIZE,
             "pct_lo": pct_lo,
             "pct_hi": pct_hi,
             "image": base.tobytes(),
         }
 
-    def star_data(self, date: str) -> dict[str, Any]:
-        """Download: the field's Gaia rows exactly as used (re-uploadable)."""
+    def star_data(self, date: str, display: str = "") -> dict[str, Any]:
+        """Download: the field's Gaia rows exactly as used (re-uploadable), and the slider positions."""
         if self.gaia is None:
             raise InputError("Click Show Stars first.")
-        name, data = star_data_csv(self.gaia, self.title, self.field_text, self.source, date)
+        name, data = star_data_csv(self.gaia, self.title, self.field_text, self.source, date, display)
         return {"name": name, "data": data}
 
     def hr_points(self, magnitude_type: str, date: str) -> dict[str, Any]:

@@ -416,7 +416,7 @@ def test_star_data_download_and_reupload(browser, sites) -> None:  # type: ignor
         "document.getElementById('source').textContent.includes('uploaded')", timeout=60_000
     )
     assert page.text_content("#count") == count == "1,369"
-    assert page.text_content("#notes") == ""
+    assert page.text_content("#notes") == "Picture settings restored from the file."  # the only note
     assert page.errors == []  # type: ignore[attr-defined]
     page.close()
 
@@ -658,4 +658,90 @@ def test_escape_leaves_full_screen(browser, sites) -> None:  # type: ignore[no-u
     page.keyboard.press("Escape")
     state = viewer_state(page)
     assert not state["exitShown"] and state["pressed"] == "false" and state["focus"] == "fullscreen"
+    page.close()
+
+
+SLIDERS = ["colsat", "gamma", "mini", "maxi"]
+
+
+def set_sliders(page, fractions: list[float]) -> None:  # type: ignore[no-untyped-def]
+    page.evaluate(
+        """([ids, fractions]) => ids.forEach((id, i) => {
+            const s = document.getElementById(id);
+            const lo = Number(s.min), hi = Number(s.max);
+            s.value = String(lo + (hi - lo) * fractions[i]);
+            s.dispatchEvent(new Event('input'));
+        })""",
+        [SLIDERS, fractions],
+    )
+    page.wait_for_timeout(100)
+
+
+def test_star_data_brings_back_the_slider_positions(browser, sites, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    enter_m13(page)
+    page.click("#show-stars")
+    stars_shown(page)
+    defaults = page.evaluate("(ids) => ids.map((id) => document.getElementById(id).value)", SLIDERS)
+    set_sliders(page, [0.83, 0.37, 0.12, 0.41])
+    tuned = page.evaluate("(ids) => ids.map((id) => document.getElementById(id).value)", SLIDERS)
+    tuned_picture = page.evaluate("document.getElementById('sky').toDataURL()")
+    with page.expect_download() as info:
+        page.click("#data-download")
+    path = tmp_path / info.value.suggested_filename
+    info.value.save_as(path)  # downloads vanish when their page closes
+    assert "# Display sliders: colsat=" in path.read_text()
+    page.close()
+
+    fresh = open_page(browser, sites["without"], gavo_ok([]))  # a new visit, e.g. the grader
+    enter_m13(fresh)
+    fresh.evaluate("document.getElementById('upload').open = true")
+    fresh.set_input_files("#file", str(path))
+    fresh.click("#use-file")
+    fresh.wait_for_function(
+        "document.getElementById('source').textContent.includes('uploaded')", timeout=60_000
+    )
+    assert fresh.evaluate("(ids) => ids.map((id) => document.getElementById(id).value)", SLIDERS) == tuned
+    assert fresh.evaluate("document.getElementById('sky').toDataURL()") == tuned_picture  # pixel for pixel
+    assert "Picture settings restored from the file." in (fresh.text_content("#notes") or "")
+    fresh.click("#reset-sliders")
+    assert fresh.evaluate("(ids) => ids.map((id) => document.getElementById(id).value)", SLIDERS) == defaults
+    assert fresh.errors == []  # type: ignore[attr-defined]
+    fresh.close()
+
+
+def test_picture_png_records_settings_and_credit(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    import struct
+    import zlib
+
+    from PIL import Image
+
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    enter_m13(page)
+    page.click("#show-stars")
+    stars_shown(page)
+    set_sliders(page, [0.6, 0.25, 0.05, 0.5])
+    exact = page.evaluate("(ids) => ids.map((id) => id + '=' + document.getElementById(id).value)", SLIDERS)
+    with page.expect_download() as info:
+        page.click("#sky-download")
+    data = Path(info.value.path()).read_bytes()
+
+    offset, chunks = 8, []  # every chunk's CRC-32 must be right
+    while offset < len(data):
+        (length,) = struct.unpack(">I", data[offset : offset + 4])
+        kind, body = data[offset + 4 : offset + 8], data[offset + 8 : offset + 8 + length]
+        (crc,) = struct.unpack(">I", data[offset + 8 + length : offset + 12 + length])
+        assert zlib.crc32(kind + body) == crc, kind
+        chunks.append(kind)
+        offset += 12 + length
+    assert chunks[0] == b"IHDR" and chunks[-1] == b"IEND" and chunks.count(b"tEXt") == 5
+
+    image = Image.open(info.value.path())
+    image.load()  # Pillow also checks the file
+    assert image.size == (1200, 1200)
+    text = image.text  # type: ignore[attr-defined]
+    assert "; ".join(exact) in text["Description"]
+    assert text["Title"].startswith("Show Clusters picture: M13, RA +16 : 41 : 42")
+    assert text["Source"] == "Gaia DR3 via GAVO"
+    assert "ESA/Gaia/DPAC" in text["Copyright"] and "HYG" in text["Copyright"]
     page.close()

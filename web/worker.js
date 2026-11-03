@@ -77,7 +77,9 @@ context.onmessage = (/** @type {MessageEvent} */ { data }) => {
       context.postMessage({ id, ok: true, result }, [result.image.buffer]);
       return;
     } else if (action === "starData" || action === "hrPoints") {
-      const py = action === "starData" ? session.star_data(args.date) : session.hr_points(args.magnitudeType, args.date);
+      const py = action === "starData"
+        ? session.star_data(args.date, args.display || "")
+        : session.hr_points(args.magnitudeType, args.date);
       result = toJs(py);
       context.postMessage({ id, ok: true, result }, [result.data.buffer]);
       return;
