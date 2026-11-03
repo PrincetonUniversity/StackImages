@@ -27,10 +27,23 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .facts dt { font-weight: 600; }
 .facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 .notes { color: #8a5a00; margin: 0 0 12px; }
-#sky { display: block; width: 100%; height: auto; background: black; border-radius: 6px; }
-/* label | value | slider. The value has its own fixed-width column (widest: "59047.00"), so
-   changing numbers never move the sliders under the pointer. */
-.sliders { display: grid; grid-template-columns: max-content 9ch 1fr; gap: 6px 12px; margin-top: 14px; align-items: center; }
+/* The picture never gets taller than the screen, so it and its controls can be seen together:
+   beside it on wide screens (controls stay in view while scrolling), below it on narrow ones,
+   where the picture leaves room for the controls (~290px). */
+.viewer { display: grid; gap: 16px 20px; align-items: start; }
+#sky { display: block; justify-self: center; width: min(100%, calc(100svh - 290px)); height: auto;
+       aspect-ratio: 1; background: black; border-radius: 6px; }
+.controls .actions { margin-top: 12px; }
+.controls .hint, .controls .credit { margin: 10px 0 0; }
+@media (min-width: 880px) {
+  .viewer { grid-template-columns: minmax(0, 1fr) 260px; }
+  #sky { width: min(100%, calc(100svh - 32px)); }
+  .controls { position: sticky; top: 16px; }
+}
+/* label + value on one row, slider below. The value has its own fixed-width column (widest:
+   "59047.00"), so changing numbers never move the sliders under the pointer. */
+.sliders { display: grid; grid-template-columns: 1fr 9ch; gap: 2px 12px; align-items: center; }
+.sliders input { grid-column: 1 / -1; margin-bottom: 6px; }
 .sliders label { font-size: .92rem; }
 .sliders output { color: #536b82; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; overflow: hidden; }
 .sliders input { width: 100%; padding: 0; border: 0; }
@@ -44,10 +57,9 @@ footer { margin-top: 28px; }
   main { padding: 24px 16px; }
   .panel { padding: 18px; }
   .grid { grid-template-columns: 1fr; }
-  .sliders { grid-template-columns: 1fr 9ch; }
-  .sliders input { grid-column: 1 / -1; }
 }
 .credit { color: #536b82; font-size: .82rem; margin: 10px 0 0; }
+.upload { margin-top: 16px; padding-top: 12px; border-top: 1px solid #d7e1ea; }
 .placeholder { color: #536b82; font-style: italic; margin: 0; }
 .feature { border-color: #174f77; }
 .badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: #e3eef7; color: #174f77; font-size: .75rem; font-weight: 600; vertical-align: middle; }

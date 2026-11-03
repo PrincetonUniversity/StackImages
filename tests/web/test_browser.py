@@ -508,3 +508,63 @@ def test_sliders_stay_put_while_values_change(browser, sites, width: int) -> Non
                 assert (ax, ay, aw) == pytest.approx((bx, by, bw), abs=0.5), (slider, end, before, after)
     assert "59047.00" in texts  # the widest value (nonlinear stretch at its maximum) was shown
     page.close()
+
+
+@pytest.mark.parametrize(
+    ("width", "height"), [(1280, 800), (1440, 900), (1024, 768), (768, 1024), (390, 844)]
+)
+def test_picture_and_sliders_fit_on_screen_together(browser, sites, width: int, height: int) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    page.set_viewport_size({"width": width, "height": height})
+    enter_m13(page)
+    page.click("#show-stars")
+    stars_shown(page)
+    span = page.evaluate(
+        """() => {
+            const ids = ['sky', 'colsat', 'gamma', 'mini', 'maxi', 'reset-sliders'];
+            const boxes = ids.map((id) => document.getElementById(id).getBoundingClientRect());
+            const min = (key) => Math.min(...boxes.map((b) => b[key]));
+            const max = (key) => Math.max(...boxes.map((b) => b[key]));
+            return { top: min('top'), bottom: max('bottom'), left: min('left'), right: max('right'),
+                     sky: boxes[0].height };
+        }"""
+    )
+    assert span["bottom"] - span["top"] <= height, span  # one scroll position shows them all
+    assert span["left"] >= 0 and span["right"] <= width, span
+    assert span["sky"] >= min(width, height) * 0.45, span  # the picture stays a useful size
+    page.close()
+
+
+def test_reset_puts_the_sliders_back(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    enter_m13(page)
+    page.click("#show-stars")
+    stars_shown(page)
+    ids = ["colsat", "gamma", "mini", "maxi"]
+    snapshot = "(ids) => ids.map((id) => document.getElementById(id).value)"
+    pixels = "() => document.getElementById('sky').toDataURL()"
+    initial, initial_picture = page.evaluate(snapshot, ids), page.evaluate(pixels)
+    reset = page.get_by_role("button", name="Reset sliders")
+    for slider in ids:
+        page.evaluate(
+            "(id) => { const s = document.getElementById(id); s.value = s.min;"
+            " s.dispatchEvent(new Event('input')); }",
+            slider,
+        )
+    page.wait_for_timeout(100)
+    assert page.evaluate(snapshot, ids) != initial and page.evaluate(pixels) != initial_picture
+    reset.click()
+    page.wait_for_timeout(100)
+    assert page.evaluate(snapshot, ids) == initial
+    assert page.evaluate(pixels) == initial_picture  # the picture is back exactly as first drawn
+    page.close()
+
+
+def test_upload_option_is_part_of_choosing_a_field(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    inside = page.evaluate(
+        "document.getElementById('upload').closest('section').querySelector('h2').textContent"
+    )
+    assert inside == "1. Choose a field"
+    assert "nothing to install" not in (page.text_content(".intro") or "")
+    page.close()
