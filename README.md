@@ -131,7 +131,9 @@ https://princetonuniversity.github.io/StackImages/ShowClusters/ runs ShowCluster
 1. Type an object (`m13`, `NGC5466`, `IC4665`) and click **Look up** (or press Enter); RA and Dec fill in.
 2. Set the field of view and maximum magnitude, then click **Show Stars**.
 3. Adjust the picture with the sliders; choose Apparent or Absolute and click **HR Diagram**.
-4. Use **Download HR diagram (PNG)** to save it.
+4. Use **Download HR diagram (PNG)** to save it. **Download star data (CSV)** saves the exact Gaia
+   stars used (upload it again to reproduce the result); **Download HR points (CSV)** saves the
+   diagram's points.
 
 How it works: the page runs Python in the browser with Pyodide. `web/showclusters.py` is a
 GUI-free port of the ShowClusters functions in `ass.py` (which is unchanged), checked against
@@ -151,6 +153,26 @@ scripts/run_web.sh            # downloads Pyodide once, builds _site/, serves ht
 docker-compose run --rm web-tools                         # web unit + browser tests
 docker-compose run --rm lint-js sh -c "npm ci && npm run check"   # eslint + tsc
 ```
+
+Data and credits
+----------------
+Show Clusters (desktop and web) uses star data from these sources; please keep the credits when
+sharing results or the downloaded CSV files (which carry them in their `#` header lines).
+
+- **Gaia DR3** — ESA/Gaia/DPAC, licensed
+  [CC BY-NC 3.0 IGO](https://www.cosmos.esa.int/web/gaia-users/license). ESA asks for this
+  acknowledgement: *"This work has made use of data from the European Space Agency (ESA) mission
+  Gaia (https://www.cosmos.esa.int/gaia), processed by the Gaia Data Processing and Analysis
+  Consortium (DPAC, https://www.cosmos.esa.int/web/gaia/dpac/consortium). Funding for the DPAC has
+  been provided by national institutions, in particular the institutions participating in the Gaia
+  Multilateral Agreement."* Cite Gaia Collaboration, Prusti et al. 2016, A&A 595, A1 and Gaia
+  Collaboration, Vallenari et al. 2023, A&A 674, A1
+  ([credit and citation instructions](https://gea.esac.esa.int/archive/documentation/GDR3/Miscellaneous/sec_credit_and_citation_instructions/)).
+- **HYG database v3** (`csv/hygdata_v3.csv`, the bright stars) — David Nash,
+  [codeberg.org/astronexus/hyg](https://codeberg.org/astronexus/hyg), licensed
+  [CC BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+- **GAVO** — the German Astrophysical Virtual Observatory serves the web page's live Gaia data
+  ([dc.g-vo.org](https://dc.g-vo.org/), table `gaia.dr3lite`).
 
 Notes
 -----
