@@ -34,6 +34,22 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 #sky { display: block; justify-self: center; width: min(100%, calc(100svh - 290px)); height: auto;
        aspect-ratio: 1; background: black; border-radius: 6px; }
 .controls .actions { margin-top: 12px; }
+.exit { display: none; }
+/* Full screen: the picture and its controls take the whole window (the browser's own full screen
+   too, where allowed). The Exit button has its own band at the top, so it never covers the picture. */
+.viewer.fullscreen { position: fixed; inset: 0; z-index: 1000; margin: 0; padding: 56px 16px 16px;
+                     background: #0b1520; grid-template-columns: minmax(0, 1fr) 260px; overflow: auto; }
+.viewer.fullscreen #sky { width: min(100%, calc(100dvh - 72px)); }
+.viewer.fullscreen .controls { position: static; background: white; border-radius: 10px; padding: 14px; }
+.viewer.fullscreen .exit { display: inline-block; position: fixed; top: 10px; right: 16px; z-index: 1001;
+                           background: white; color: #174f77; border-color: white; padding: 7px 14px; }
+.viewer.fullscreen .exit .key { color: #536b82; font-size: .85em; }
+.viewer.fullscreen #fullscreen, .viewer.fullscreen .controls .hint { display: none; }  /* redundant here */
+body.no-scroll { overflow: hidden; }
+@media (max-aspect-ratio: 1/1) {
+  .viewer.fullscreen { grid-template-columns: 1fr; }
+  .viewer.fullscreen #sky { width: min(100%, calc(100dvh - 72px - 330px)); }
+}
 .controls .hint, .controls .credit { margin: 10px 0 0; }
 @media (min-width: 880px) {
   .viewer { grid-template-columns: minmax(0, 1fr) 260px; }
