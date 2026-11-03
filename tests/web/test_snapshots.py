@@ -110,7 +110,7 @@ def test_field_too_dense_even_when_split_lowers_the_limit(tmp_path: Path) -> Non
     attempts: list[float] = []
 
     def dense(adql: str) -> bytes:
-        attempts.append(float(re.search(r"phot_g_mean_mag < +([0-9.]+)", adql).group(1)))  # type: ignore[union-attr]
+        attempts.append(float(re.search(r"phot_g_mean_mag (?:\+ 0 )?< +([0-9.]+)", adql).group(1)))  # type: ignore[union-attr]
         if attempts[-1] > 12.5:
             raise bs.GavoTimeoutError("timed out")
         return FakeGaia().answer(adql)[1]

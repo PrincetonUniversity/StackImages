@@ -104,12 +104,30 @@ Every result is labelled with its source on the page and in the HR diagram's cor
 GAVO's quick endpoint stops any query after about 20 seconds ("Query timed out"). Measured on
 2026-11-02, a circle up to 1° radius answers in 1–2 s in an ordinary field, but 1.2° times out
 (M44 with FOV 2 did), and in the dense Milky Way bulge (M7, M22) only about 0.2° answers in time.
+Many of those dense-field timeouts weren't about size. With a plain
+`phot_g_mean_mag < 16` condition, GAVO's database can choose its magnitude index, which
+in a dense field means scanning every bright star in the sky. Measured on 2026-11-03,
+M23 at FOV 0.3 timed out that way, while the same circle without the magnitude
+condition returned 37,793 stars in 11 s. The page therefore writes the condition as
+`phot_g_mean_mag + 0 < 16`. That selects the same stars but keeps the database on the
+position index:
+
+| Field | Before | With `+ 0` |
+|---|---|---|
+| M23, FOV 0.3, G < 16 | timed out (20 s) | 1,319 stars, ~2–15 s |
+| M22, FOV 0.5, G < 18 | timed out | 44,252 stars, ~25 s |
+| NGC 6397, FOV 0.5, G < 17 | 9.0 s | 1.9 s |
+
+M13, M44 and M45 were unchanged, and every result both forms returned was identical.
+Only GAVO's query changed; the ESA query stays exactly as `ass.py` writes it.
+
 So the page:
 
 1. Sends a field whose query circle is at most 0.9° radius (FOV up to ~1.27°) as **one query**,
    exactly as before.
 2. Covers a larger field with **pieces** of at most 0.9° radius (FOV 2 → 9 pieces), fetched four
-   at a time, with a progress count.
+   at a time. That limit applies to every piece, including the smaller ones made by splitting. Up
+   to 2026-11-03, the pieces of a split came one after another, which made crowded fields very slow.
 3. **Splits a piece that times out** into four smaller ones, down to 0.05°; if even those time
    out, it says the field has too many stars and suggests a smaller FOV or magnitude limit.
 4. **Reassembles** the pieces into exactly the one-query result: stars seen in two overlapping
@@ -120,7 +138,14 @@ So the page:
 byte for byte: star count, brightest star, every star's values, the picture's pixels, the HR
 diagram's points and the downloaded PNG, for one and for two levels of splitting. It also
 checks that the pieces cover the field (including near the poles and across RA 0h).
-`test_browser.py` checks the same through the real page.
+`test_browser.py` checks the same through the real page, including that the four pieces of a
+split are requested together.
+
+While the data downloads, the page shows a progress bar (parts done, for a field in pieces)
+and a clock: "*N* s so far. Please keep this tab open; crowded parts of the Milky Way can take a
+minute or two." Only the status line (which changes when a part arrives) is read by screen readers.
+When pieces have been split, the status line says so. The page gives up after 3 minutes and
+falls back to a saved copy or an ESA file. M23 at FOV 2 took 139 s on 2026-11-03.
 
 ## Downloads
 

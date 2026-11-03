@@ -2,7 +2,9 @@
 
 It applies the query's circle and magnitude limit to the fixture rows (so split queries
 return exactly the stars a real service would), and can time out like GAVO's quick
-endpoint for circles larger than `timeout_radius`.
+endpoint for circles larger than `timeout_radius`. With `slow_magnitude_index`, it also
+times out on a bare magnitude condition, as GAVO does in dense Milky Way fields such as
+M23's (measured 2026-11-03): its planner then scans the whole sky's bright stars.
 """
 
 from __future__ import annotations
@@ -17,11 +19,16 @@ TIMEOUT_BODY = (
     b"Field query: Query timed out (took too long).</INFO></RESOURCE></VOTABLE>"
 )
 _CIRCLE = re.compile(r"DISTANCE\(\s*([-\d.]+),\s*([-\d.]+),\s*gaia\.ra,\s*gaia\.dec\)\s*<\s*([-\d.]+)")
-_MAG = re.compile(r"phot_g_mean_mag\s*<\s*([-\d.]+)")
+_MAG = re.compile(r"phot_g_mean_mag(\s*\+\s*0)?\s*<\s*([-\d.]+)")
 
 
 class FakeGaia:
-    def __init__(self, fixture: str = "m13_gavo.csv", timeout_radius: float | None = None) -> None:
+    def __init__(
+        self,
+        fixture: str = "m13_gavo.csv",
+        timeout_radius: float | None = None,
+        slow_magnitude_index: bool = False,
+    ) -> None:
         lines = (FIXTURES / fixture).read_text().splitlines()
         self.header = lines[0]
         columns = self.header.split(",")
@@ -32,6 +39,7 @@ class FakeGaia:
             if (f := line.split(","))
         ]
         self.timeout_radius = timeout_radius
+        self.slow_magnitude_index = slow_magnitude_index
         self.queries: list[str] = []
 
     def answer(self, query: str) -> tuple[int, bytes]:
@@ -43,7 +51,9 @@ class FakeGaia:
         ra0, dec0, radius = (float(v) for v in circle.groups())
         if self.timeout_radius is not None and radius > self.timeout_radius:
             return 500, TIMEOUT_BODY
-        limit = float(mag.group(1))
+        if self.slow_magnitude_index and not mag.group(1):
+            return 500, TIMEOUT_BODY
+        limit = float(mag.group(2))
         kept = [
             line for line, ra, dec, g in self.rows if g < limit and _distance(ra0, dec0, ra, dec) < radius
         ]
