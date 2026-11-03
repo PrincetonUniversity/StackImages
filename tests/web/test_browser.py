@@ -568,3 +568,23 @@ def test_upload_option_is_part_of_choosing_a_field(browser, sites) -> None:  # t
     assert inside == "1. Choose a field"
     assert "nothing to install" not in (page.text_content(".intro") or "")
     page.close()
+
+
+@pytest.mark.parametrize(
+    ("fov", "shown"),
+    [
+        ("0.3", "degrees (18 arcminutes)"),
+        ("0.2", "degrees (12 arcminutes)"),
+        ("2", "degrees (120 arcminutes)"),
+        ("0.125", "degrees (7.5 arcminutes)"),
+        ("0.01", "degrees (0.6 arcminutes)"),
+        ("", "degrees"),
+        ("-1", "degrees"),
+    ],
+)
+def test_fov_shows_arcminutes(browser, sites, fov: str, shown: str) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    assert page.text_content("#fov-unit") == "degrees (18 arcminutes)"  # the default 0.3
+    page.fill("#fov", fov)  # fires input events as the student types
+    assert page.text_content("#fov-unit") == shown
+    page.close()
