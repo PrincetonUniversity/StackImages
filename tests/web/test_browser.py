@@ -392,3 +392,79 @@ def test_too_dense_field_says_so(browser, sites) -> None:  # type: ignore[no-unt
     assert "unavailable" not in (page.text_content("#error") or "")
     assert len(fake.queries) > 5  # it split before giving up
     page.close()
+
+
+def test_star_data_download_and_reupload(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    enter_m13(page)
+    page.click("#show-stars")
+    count = stars_shown(page)
+    assert "ESA/Gaia/DPAC" in (page.text_content("#stars-content .credit") or "")
+    with page.expect_download() as info:
+        page.click("#data-download")
+    download = info.value
+    assert download.suggested_filename.startswith(
+        "M13_FOV0.2_G16_GAVO_"
+    ) and download.suggested_filename.endswith("_stars.csv")
+    text = Path(download.path()).read_text()
+    assert text.startswith("# Show Clusters star data: M13") and "CC BY-NC 3.0 IGO" in text
+
+    page.evaluate("document.getElementById('upload').open = true")
+    page.set_input_files("#file", download.path())
+    page.click("#use-file")
+    page.wait_for_function(
+        "document.getElementById('source').textContent.includes('uploaded')", timeout=60_000
+    )
+    assert page.text_content("#count") == count == "1,369"
+    assert page.text_content("#notes") == ""
+    assert page.errors == []  # type: ignore[attr-defined]
+    page.close()
+
+
+def test_hr_points_download_follows_the_diagram_shown(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    enter_m13(page)
+    page.click("#show-stars")
+    stars_shown(page)
+    assert page.is_hidden("#hr-csv-download") and page.is_hidden("#hr-credit")
+    page.select_option("#magtype", "Absolute")
+    page.click("#hr-button")
+    page.wait_for_function("!document.getElementById('hr').hidden")
+    assert "HYG database v3" in (page.text_content("#hr-credit") or "")
+    page.select_option("#magtype", "Apparent")  # menu changed, diagram not redrawn
+    with page.expect_download() as info:
+        page.click("#hr-csv-download")
+    download = info.value
+    assert download.suggested_filename == "M13_HR_Absolute_points.csv"
+    lines = Path(download.path()).read_text().splitlines()
+    header = next(line for line in lines if not line.startswith("#"))
+    assert header.split(",") == [
+        "catalog",
+        "ra_deg",
+        "dec_deg",
+        "parallax_mas",
+        "apparent_mag",
+        "absolute_mag",
+        "color_index",
+        "x_plotted",
+        "y_plotted",
+        "drawn",
+    ]
+    assert sum(1 for line in lines if not line.startswith("#")) - 1 == 1369
+    assert any("CC BY-SA 2.5" in line for line in lines if line.startswith("#"))
+    page.close()
+
+
+def test_footer_credits_gaia_and_hyg(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    footer = page.text_content("footer") or ""
+    for text in (
+        "European Space Agency (ESA) mission",
+        "Gaia Multilateral Agreement",
+        "CC BY-NC 3.0 IGO",
+        "HYG database",
+        "CC BY-SA 2.5",
+        "GAVO",
+    ):
+        assert text in footer, text
+    page.close()

@@ -43,6 +43,7 @@ footer { margin-top: 28px; }
   .panel { padding: 18px; }
   .grid, .sliders { grid-template-columns: 1fr; }
 }
+.credit { color: #536b82; font-size: .82rem; margin: 10px 0 0; }
 .placeholder { color: #536b82; font-style: italic; margin: 0; }
 .feature { border-color: #174f77; }
 .badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: #e3eef7; color: #174f77; font-size: .75rem; font-weight: 600; vertical-align: middle; }
