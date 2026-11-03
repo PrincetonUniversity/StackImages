@@ -64,6 +64,8 @@ context.onmessage = (/** @type {MessageEvent} */ { data }) => {
     let result;
     if (action === "lookup") {
       result = toJs(session.lookup(args.name));
+    } else if (action === "fileField") {
+      result = toJs(session.file_field(args.bytes)) ?? null;
     } else if (action === "plan") {
       result = toJs(session.plan(args.ra, args.dec, args.fov, args.maxmag));
     } else if (action === "split") {
@@ -77,7 +79,9 @@ context.onmessage = (/** @type {MessageEvent} */ { data }) => {
       context.postMessage({ id, ok: true, result }, [result.image.buffer]);
       return;
     } else if (action === "starData" || action === "hrPoints") {
-      const py = action === "starData" ? session.star_data(args.date) : session.hr_points(args.magnitudeType, args.date);
+      const py = action === "starData"
+        ? session.star_data(args.date, args.display || "")
+        : session.hr_points(args.magnitudeType, args.date);
       result = toJs(py);
       context.postMessage({ id, ok: true, result }, [result.data.buffer]);
       return;

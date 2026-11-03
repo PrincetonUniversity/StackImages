@@ -272,8 +272,11 @@ async function showStars(bytes, filename, source, maxRows, uploaded = false) {
     "showStars",
     { bytes, filename, source, title, maxRows, uploaded, ...field },
   );
+  pictureField = { title, source, ...field };
   displayStars(result, source);
-  setStatus(`Plotted ${result.count.toLocaleString()} stars. Adjust the sliders, or click HR Diagram.`);
+  setStatus(result.display
+    ? `Plotted ${result.count.toLocaleString()} stars, with the picture settings saved in the file.`
+    : `Plotted ${result.count.toLocaleString()} stars. Adjust the sliders, or click HR Diagram.`);
 }
 
 async function onShowStars() {
@@ -333,8 +336,28 @@ async function onUseFile() {
   busy = true;
   refresh();
   try {
-    if (!(await lookup())) return;
-    await showStars(new Uint8Array(await file.arrayBuffer()), file.name, `Gaia DR3 from uploaded ESA file (${file.name})`, 0, true);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    // A star-data file from this page records its field: fill in the form from it, so the file is
+    // shown as it was saved whatever the form held. Other files use the form as it is.
+    const recorded = await call("fileField", { bytes });
+    if (recorded) {
+      objectInput.value = recorded.object;
+      raInput.value = recorded.ra;
+      decInput.value = recorded.dec;
+      fovInput.value = String(recorded.fov);
+      maxmagInput.value = String(recorded.maxmag);
+      objectName = recorded.object;
+      showFovArcminutes();
+      await preview();
+    } else if (!(await lookup())) {
+      return;
+    }
+    await showStars(bytes, file.name, `Gaia DR3 from uploaded ESA file (${file.name})`, 0, true);
+    if (recorded) {
+      $("notes").append(Object.assign(document.createElement("li"), {
+        textContent: "Field (object, RA, Dec, field of view, maximum magnitude) filled in from the file.",
+      }));
+    }
   } catch (error) {
     report(error, "This file could not be used");
   } finally {
@@ -370,6 +393,15 @@ function displayStars(result, source) {
   sliders.gamma.value = "2";
   // Remember where the sliders started (as slidershow in ass.py starts them), for Reset.
   initialSliders = Object.fromEntries(Object.entries(sliders).map(([name, slider]) => [name, slider.value]));
+  if (result.display) {
+    // A star-data file downloaded from this page: put the sliders where they were (Reset still
+    // returns to the standard starting positions). Values outside a slider's range are clamped.
+    for (const [name, slider] of Object.entries(sliders)) {
+      const value = result.display[name];
+      if (typeof value === "string" && Number.isFinite(Number(value))) slider.value = value;
+    }
+    notes.append(Object.assign(document.createElement("li"), { textContent: "Picture settings restored from the file." }));
+  }
   magtype.value = "Apparent"; // ass.py resets the magnitude type on Show Stars
   hrImage.hidden = true;
   hrDownloads.hidden = true;
@@ -519,6 +551,89 @@ async function downloadCsv(action, args, what) {
   }
 }
 
+// ---- Recording the picture settings ------------------------------------------------------
+
+/** @type {{title: string, source: string, ra: string, dec: string, fov: number, maxmag: number} | null} */
+let pictureField = null;
+
+/**
+ * The sliders' exact positions (restored when a star-data file is uploaded again), then the
+ * values as shown beside them. Parsed by showclusters.display_settings.
+ */
+function displaySummary() {
+  const exact = Object.entries(sliders).map(([name, slider]) => `${name}=${slider.value}`).join("; ");
+  const shown = [["color saturation", "colsat"], ["nonlinear stretch", "gamma"], ["min", "mini"], ["max", "maxi"]]
+    .map(([label, name]) => `${label} ${$(`${name}-value`).textContent}`).join(", ");
+  return `${exact} (shown as ${shown})`;
+}
+
+/** Text fields for the picture PNG (standard PNG keywords; ASCII only). */
+function pictureText() {
+  const f = pictureField;
+  const field = f ? `${f.title}, RA ${f.ra}, Dec ${f.dec}, FOV ${f.fov} deg, G < ${f.maxmag}` : "";
+  const name = f && /^(M|NGC|IC)\d+$/.test(f.title) ? f.title : "";
+  return [
+    ["Title", `Show Clusters picture: ${field}`],
+    ...(f ? [
+      ["Object Catalog Name", name],
+      ["Right Ascension (RA)", f.ra],
+      ["Declination (Dec)", f.dec],
+      ["Field of View (FOV)", String(f.fov)],
+      ["Maximum Magnitude", String(f.maxmag)],
+    ] : []),
+    ["Description", `Display sliders: ${displaySummary()}`],
+    ["Source", f ? f.source : ""],
+    ["Copyright", "Gaia DR3 data: ESA/Gaia/DPAC, CC BY-NC 3.0 IGO. Bright stars: HYG database v3 (David Nash), CC BY-SA 2.5."],
+    ["Software", "Show Clusters (StackImages), https://princetonuniversity.github.io/StackImages/ShowClusters/"],
+  ];
+}
+
+/** @type {Uint32Array | null} */
+let crcTable = null;
+/** @param {Uint8Array} bytes */
+function crc32(bytes) {
+  if (!crcTable) {
+    crcTable = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      crcTable[n] = c >>> 0;
+    }
+  }
+  let crc = 0xffffffff;
+  for (const byte of bytes) crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * Insert tEXt chunks after a PNG's header chunk (IHDR ends at byte 33).
+ * @param {Uint8Array} png @param {string[][]} entries [keyword, text] pairs
+ * @returns {Uint8Array<ArrayBuffer>}
+ */
+function pngWithText(png, entries) {
+  const ascii = (/** @type {string} */ text) =>
+    Uint8Array.from(text.replace(/[^\x20-\x7e]/g, "?"), (c) => c.charCodeAt(0));
+  const chunks = entries.filter(([, text]) => text).map(([keyword, text]) => {
+    const body = new Uint8Array([...ascii("tEXt"), ...ascii(keyword), 0, ...ascii(text)]);
+    const chunk = new Uint8Array(body.length + 8);
+    const view = new DataView(chunk.buffer);
+    view.setUint32(0, body.length - 4);
+    chunk.set(body, 4);
+    view.setUint32(body.length + 4, crc32(body));
+    return chunk;
+  });
+  const size = png.length + chunks.reduce((sum, c) => sum + c.length, 0);
+  const out = new Uint8Array(size);
+  out.set(png.subarray(0, 33), 0);
+  let offset = 33;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  out.set(png.subarray(33), offset);
+  return out;
+}
+
 // ---- Full screen ------------------------------------------------------------------------
 
 function inFullscreen() {
@@ -595,7 +710,7 @@ document.addEventListener("fullscreenchange", () => {
 hrButton.addEventListener("click", () => void onHrDiagram());
 dataDownload.addEventListener("click", (event) => {
   event.preventDefault();
-  void downloadCsv("starData", {}, "star data");
+  void downloadCsv("starData", { display: displaySummary() }, "star data");
 });
 hrCsvDownload.addEventListener("click", (event) => {
   event.preventDefault();
@@ -618,9 +733,10 @@ copyButton.addEventListener("click", async () => {
 skyDownload.addEventListener("click", (event) => {
   if (!picture) return;
   event.preventDefault();
-  canvas.toBlob((blob) => {
+  canvas.toBlob(async (blob) => {
     if (!blob) return;
-    const url = URL.createObjectURL(blob);
+    const png = pngWithText(new Uint8Array(await blob.arrayBuffer()), pictureText());
+    const url = URL.createObjectURL(new Blob([png], { type: "image/png" }));
     const link = Object.assign(document.createElement("a"), { href: url, download: skyDownload.download });
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
