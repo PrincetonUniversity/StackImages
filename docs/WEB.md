@@ -87,15 +87,39 @@ Browsers only let a page read data from another site if that site allows it (COR
 ESA's Gaia archive does not allow it; the German Astrophysical Virtual Observatory's copy
 of Gaia DR3 (`dc.g-vo.org`, table `gaia.dr3lite`) does. So the page tries, in order:
 
-1. **GAVO, live.** The same query the desktop app sends to ESA.
+1. **GAVO, live.** The same query the desktop app sends to ESA. Large or crowded fields are
+   fetched in pieces (see below).
 2. **A saved copy**, if GAVO fails or times out and a snapshot covers the requested object,
    field and magnitude limit. The page filters it to the requested field. Snapshots are
-   built by `snapshots.yml` (from ESA when it answers, otherwise GAVO) and published as
+   built by `snapshots.yml` (from GAVO in pieces, or ESA if GAVO fails) and published as
    `snapshots-YYYYMMDD-HHMM` releases; the Pages build downloads the latest one.
 3. **A file the student downloads from the ESA Gaia archive** (CSV, VOTable or FITS). The
    page shows the exact query to paste into the archive's ADQL search.
 
 Every result is labelled with its source on the page and in the HR diagram's corner.
+
+### Large and crowded fields
+
+GAVO's quick endpoint stops any query after about 20 seconds ("Query timed out"). Measured on
+2026-11-02, a circle up to 1° radius answers in 1–2 s in an ordinary field, but 1.2° times out
+(M44 with FOV 2 did), and in the dense Milky Way bulge (M7, M22) only about 0.2° answers in time.
+So the page:
+
+1. Sends a field whose query circle is at most 0.9° radius (FOV up to ~1.27°) as **one query**,
+   exactly as before.
+2. Covers a larger field with **pieces** of at most 0.9° radius (FOV 2 → 9 pieces), fetched four
+   at a time, with a progress count.
+3. **Splits a piece that times out** into four smaller ones, down to 0.05°; if even those time
+   out, it says the field has too many stars and suggests a smaller FOV or magnitude limit.
+4. **Reassembles** the pieces into exactly the one-query result: stars seen in two overlapping
+   pieces are kept once, the result is trimmed to the query's circle and magnitude limit (using
+   the centre and radius exactly as written in the query), and stars are put in a fixed order.
+
+`tests/web/test_tiles.py` checks that this gives the **same end result** as a single query,
+byte for byte: star count, brightest star, every star's values, the picture's pixels, the HR
+diagram's points and the downloaded PNG, for one and for two levels of splitting. It also
+checks that the pieces cover the field (including near the poles and across RA 0h).
+`test_browser.py` checks the same through the real page.
 
 ## Will star counts match last year's?
 
@@ -132,7 +156,7 @@ Small differences are still possible in these cases:
 |---|---|---|
 | `ci.yml` (desktop) | push/PR to `main`, except web-only files; manual | Desktop GUI tests under Xvfb, equivalence test, packaging tests in `ci/desktop-tests.Dockerfile`; builds `PyWin.tar`; on `main`, publishes release `v<ass.py version>.<n>` when the bundle's app/data files changed (`scripts/next_release.py`) |
 | `pages.yml` (web) | push/PR touching the web files; manual | eslint + tsc (Node container), ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`), verified Pyodide download, site build with the latest snapshots; deploys on `main` |
-| `snapshots.yml` | manual only | Queries Gaia for ~75 clusters (`scripts/build_snapshots.py`), validates, publishes a `snapshots-*` release, redeploys the page. Resumes from the last release; re-run to fill gaps |
+| `snapshots.yml` | manual only | Fetches ~75 clusters (`scripts/build_snapshots.py`: GAVO in pieces, ESA as fallback, lower magnitude limit if both fail), validates, publishes a `snapshots-*` release, redeploys the page. Resumes from the last release; re-run to fill gaps |
 
 Nothing generated is committed: Pyodide (`build/vendor/`), the site (`_site/`) and
 snapshots (`build/snapshots/`) are gitignored and rebuilt or downloaded by the workflows.
@@ -175,6 +199,7 @@ Without Docker, a `.venv` works too: `uv venv --python 3.13 .venv && uv pip inst
 | Symptom | Cause / fix |
 |---|---|
 | "The live Gaia data source is unavailable…" | GAVO is down or slow. Saved copies cover common clusters; otherwise use an ESA file (bottom of the page). |
+| "This field has too many stars for the live data source…" | A wide or Milky-Way-dense field even GAVO's smallest pieces can't answer in time. Lower the FOV or Maximum Magnitude, or use an ESA file. |
 | Page stuck on "Loading Python…" | First visit downloads ~35 MB. On failure, "Reload tool" appears with details. |
 | "The Python worker stopped" | Browser ran out of memory; use a smaller field or magnitude limit. |
 | `pages.yml` warns "No snapshots-* release yet" | Run `snapshots.yml` once (Actions → Snapshots → Run workflow). |

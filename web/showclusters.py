@@ -121,8 +121,13 @@ def validate_query(ra_hours: float, dec_deg: float, fov: float, maxmag: float) -
 def gaia_adql(ra_hours: float, dec_deg: float, fov: float, maxmag: float, service: str) -> str:
     """The query ass.get_star_info sends, for ESA ('esa') or GAVO's copy ('gavo')."""
     validate_query(ra_hours, dec_deg, fov, maxmag)
+    return circle_adql(ra_hours * 15, dec_deg, fov / math.sqrt(2), maxmag, service)
+
+
+def circle_adql(ra_deg: float, dec_deg: float, radius: float, maxmag: float, service: str) -> str:
+    """Stars brighter than maxmag within `radius` degrees of (ra_deg, dec_deg)."""
     where = (
-        f"WHERE DISTANCE({ra_hours * 15:14f}, {dec_deg:14f}, gaia.ra, gaia.dec) < {fov / math.sqrt(2):14f} "
+        f"WHERE DISTANCE({ra_deg:14f}, {dec_deg:14f}, gaia.ra, gaia.dec) < {radius:14f} "
         f"AND gaia.phot_g_mean_mag < {maxmag:5f} "
     )
     if service == "esa":
@@ -138,6 +143,103 @@ def gaia_adql(ra_hours: float, dec_deg: float, fov: float, maxmag: float, servic
             "FROM gaia.dr3lite AS gaia " + where
         )
     raise ValueError(f"unknown service {service!r}")
+
+
+# --- Splitting large fields into smaller queries ---------------------------------------
+# GAVO's quick (synchronous) endpoint stops after ~20 s. Measured 2026-11-02: circles up to
+# 1.0° radius answer in ~1-2 s in sparse fields while 1.2° times out, and dense Milky Way
+# fields need ~0.2°. So a large field is covered by smaller circles, split again on timeout.
+
+TILE_RADIUS = 0.9  # degrees; first-pass piece size
+MIN_TILE_RADIUS = 0.05  # degrees; below this, give up (the field is simply too dense)
+_MARGIN = 1.02  # covers the small distortion between tangent-plane squares and sky circles
+
+
+def _sky(ra0: float, dec0: float, xi: float, eta: float) -> tuple[float, float]:
+    """Inverse gnomonic: tangent-plane offsets (degrees) around (ra0, dec0) → RA, Dec degrees."""
+    x, y = math.radians(xi), math.radians(eta)
+    d0 = math.radians(dec0)
+    rho = math.hypot(x, y)
+    if rho == 0:
+        return ra0 % 360, dec0
+    c = math.atan(rho)
+    dec = math.asin(math.cos(c) * math.sin(d0) + y * math.sin(c) * math.cos(d0) / rho)
+    ra = math.radians(ra0) + math.atan2(
+        x * math.sin(c), rho * math.cos(d0) * math.cos(c) - y * math.sin(d0) * math.sin(c)
+    )
+    return math.degrees(ra) % 360, math.degrees(dec)
+
+
+def _tile(field: dict[str, Any], xi: float, eta: float, half: float) -> dict[str, Any]:
+    ra, dec = _sky(field["ra"], field["dec"], xi, eta)
+    radius = half * math.sqrt(2) * _MARGIN
+    return {
+        "xi": xi,
+        "eta": eta,
+        "half": half,
+        "radius": radius,
+        "query": circle_adql(ra, dec, radius, field["maxmag"], field["service"]),
+    }
+
+
+def field_tiles(
+    ra_hours: float, dec_deg: float, fov: float, maxmag: float, service: str, max_radius: float = TILE_RADIUS
+) -> list[dict[str, Any]]:
+    """Queries that together cover the field's query circle (one query if it is small)."""
+    validate_query(ra_hours, dec_deg, fov, maxmag)
+    radius = fov / math.sqrt(2)
+    if radius <= max_radius:
+        # One query. Its square (used only if it must be split) encloses the whole circle.
+        return [
+            {
+                "xi": 0.0,
+                "eta": 0.0,
+                "half": radius,
+                "radius": radius,
+                "query": gaia_adql(ra_hours, dec_deg, fov, maxmag, service),
+            }
+        ]
+    field = {"ra": ra_hours * 15, "dec": dec_deg, "maxmag": maxmag, "service": service}
+    side = 2 * max_radius / (math.sqrt(2) * _MARGIN)  # square whose circumscribed circle fits
+    # In the tangent plane the sky circle reaches tan(radius), slightly beyond `radius`.
+    radius = math.degrees(math.tan(math.radians(radius)))
+    count = math.ceil(2 * radius / side)
+    start = -count * side / 2 + side / 2
+    tiles = []
+    for i in range(count):
+        for j in range(count):
+            xi, eta = start + i * side, start + j * side
+            # keep squares that touch the query circle (closest point of the square)
+            dx = max(abs(xi) - side / 2, 0)
+            dy = max(abs(eta) - side / 2, 0)
+            if math.hypot(dx, dy) < radius:
+                tiles.append(_tile(field, xi, eta, side / 2))
+    return tiles
+
+
+def split_tile(
+    tile: dict[str, Any], ra_hours: float, dec_deg: float, maxmag: float, service: str
+) -> list[dict[str, Any]]:
+    """Four smaller queries covering a piece that timed out; [] if it is already minimal."""
+    half = tile["half"] / 2
+    if half * math.sqrt(2) * _MARGIN < MIN_TILE_RADIUS:
+        return []
+    field = {"ra": ra_hours * 15, "dec": dec_deg, "maxmag": maxmag, "service": service}
+    return [
+        _tile(field, tile["xi"] + dx * half, tile["eta"] + dy * half, half)
+        for dx in (-1, 1)
+        for dy in (-1, 1)
+    ]
+
+
+def merge_tables(tables: list[dict[str, np.ndarray]]) -> dict[str, np.ndarray]:
+    """Concatenate results from several pieces, dropping stars seen twice where pieces overlap."""
+    if len(tables) == 1:
+        return tables[0]
+    merged = {name: np.concatenate([t[name] for t in tables]) for name in REQUIRED}
+    _, first = np.unique(np.stack([merged["ra"], merged["dec"]], axis=1), axis=0, return_index=True)
+    keep = np.sort(first)
+    return {name: values[keep] for name, values in merged.items()}
 
 
 # --- Reading Gaia results ------------------------------------------------------------
@@ -510,19 +612,57 @@ def hr_png(stars: Stars, magnitude_type: str, title: str, source: str) -> bytes:
 # --- Filtering saved or uploaded results to the requested field -------------------------
 
 
+def query_circle(ra_hours: float, dec_deg: float, fov: float) -> tuple[float, float, float]:
+    """Centre and radius (degrees) exactly as written into the query text (6 decimals)."""
+    return (float(f"{ra_hours * 15:14f}"), float(f"{dec_deg:14f}"), float(f"{fov / math.sqrt(2):14f}"))
+
+
 def within_query(
     gaia: dict[str, np.ndarray], ra_hours: float, dec_deg: float, fov: float, maxmag: float
 ) -> np.ndarray:
-    """Rows the ADQL query would return: DISTANCE(...) < fov/√2 and G < maxmag."""
-    ra0, dec0 = math.radians(ra_hours * 15), math.radians(dec_deg)
+    """Rows the ADQL query would return: DISTANCE(...) < radius and G < maxmag."""
+    ra_c, dec_c, radius = query_circle(ra_hours, dec_deg, fov)
+    ra0, dec0 = math.radians(ra_c), math.radians(dec_c)
     ra, dec = np.radians(gaia["ra"]), np.radians(gaia["dec"])
     with np.errstate(invalid="ignore"):
         hav = np.sin((dec - dec0) / 2) ** 2 + np.cos(dec) * math.cos(dec0) * np.sin((ra - ra0) / 2) ** 2
         distance = np.degrees(2 * np.arcsin(np.sqrt(np.clip(hav, 0, 1))))
-        return np.asarray((distance < fov / math.sqrt(2)) & (gaia["phot_g_mean_mag"] < maxmag))
+        return np.asarray((distance < radius) & (gaia["phot_g_mean_mag"] < float(f"{maxmag:5f}")))
+
+
+def canonical(gaia: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Stars in a fixed order (by RA, then Dec), so results never depend on how they arrived."""
+    order = np.lexsort((gaia["dec"], gaia["ra"]))
+    return {name: values[order] for name, values in gaia.items()}
+
+
+def assemble(
+    tables: list[dict[str, np.ndarray]], ra_hours: float, dec_deg: float, fov: float, maxmag: float
+) -> dict[str, np.ndarray]:
+    """Exactly the stars one query for the field would return, however many pieces they came in.
+
+    Pieces overlap and together cover slightly more sky than the field's circle, so the
+    merged result is de-duplicated, trimmed to the query's circle and magnitude limit, and
+    put in canonical order.
+    """
+    merged = merge_tables(tables)
+    inside = within_query(merged, ra_hours, dec_deg, fov, maxmag)
+    return canonical({name: values[inside] for name, values in merged.items()})
 
 
 # --- Browser session: the state kept between button clicks -----------------------------
+
+
+def _chunks(data: Any) -> list[bytes]:
+    """One result (bytes or a JS Uint8Array) or several (a list / JS array of them)."""
+    if isinstance(data, bytes | bytearray | memoryview):
+        return [bytes(data)]
+    if hasattr(data, "to_bytes"):  # JS Uint8Array
+        return [data.to_bytes()]
+    chunks = [c.to_bytes() if hasattr(c, "to_bytes") else bytes(c) for c in data]
+    if not chunks:
+        raise InputError("No star data was received.")
+    return chunks
 
 
 @dataclass
@@ -533,6 +673,7 @@ class Session:
     frame: Frame | None = None
     title: str = ""
     source: str = ""
+    _field: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
     def lookup(self, name: str) -> dict[str, Any]:
         found = lookup_object(name, self.catalog_dir)
@@ -545,16 +686,25 @@ class Session:
     def plan(self, ra_text: str, dec_text: str, fov: float, maxmag: float) -> dict[str, Any]:
         """Validate the inputs exactly as the boxes show them; return both queries."""
         ra, dec = parse_sexagesimal(ra_text), parse_sexagesimal(dec_text)
+        self._field = (ra, dec, maxmag)
         return {
             "ra": ra,
             "dec": dec,
             "gavo": gaia_adql(ra, dec, fov, maxmag, "gavo"),
+            "gavo_tiles": field_tiles(ra, dec, fov, maxmag, "gavo"),
             "esa": gaia_adql(ra, dec, fov, maxmag, "esa"),
         }
 
+    def split(self, tile: Any) -> list[dict[str, Any]]:
+        """Smaller GAVO queries for a piece of the last planned field that timed out."""
+        if hasattr(tile, "to_py"):  # a JavaScript object arriving through Pyodide
+            tile = tile.to_py()
+        ra, dec, maxmag = self._field
+        return split_tile(dict(tile), ra, dec, maxmag, "gavo")
+
     def show_stars(
         self,
-        data: bytes,
+        data: Any,
         filename: str,
         source: str,
         ra_text: str,
@@ -566,15 +716,18 @@ class Session:
     ) -> dict[str, Any]:
         """Show Stars: select, frame and render. Returns numbers + display image bytes."""
         self.frame = None
-        if hasattr(data, "to_bytes"):  # a JavaScript Uint8Array arriving through Pyodide
-            data = data.to_bytes()
         query = self.plan(ra_text, dec_text, fov, maxmag)
-        gaia = parse_gaia_table(data, filename)
-        rows = len(gaia["ra"])
-        inside = within_query(gaia, query["ra"], query["dec"], fov, maxmag)
+        parts = [parse_gaia_table(chunk, filename) for chunk in _chunks(data)]
         notes: list[str] = []
-        if max_rows and rows >= max_rows:
+        if max_rows and any(len(part["ra"]) >= max_rows for part in parts):
             notes.append(f"The server stopped at {max_rows:,} stars; use a smaller field or magnitude limit.")
+        gaia = merge_tables(parts)
+        rows = len(gaia["ra"])
+        if rows > MAX_ROWS:
+            raise InputError(
+                f"This field has more than {MAX_ROWS:,} stars. Use a smaller field or magnitude limit."
+            )
+        inside = within_query(gaia, query["ra"], query["dec"], fov, maxmag)
         if rows and not inside.any():
             raise InputError(
                 "None of the stars in this file are inside the requested field. "
@@ -582,7 +735,7 @@ class Session:
             )
         if rows and inside.mean() < 0.5:
             notes.append(f"Only {int(inside.sum()):,} of {rows:,} stars in the file are inside the field.")
-        gaia = {name: values[inside] for name, values in gaia.items()}
+        gaia = canonical({name: values[inside] for name, values in gaia.items()})
         stars = select_stars(gaia, self.bright, query["ra"], query["dec"], fov)
         frame = frame_stars(stars, query["ra"], query["dec"], fov)
         image = render_field(frame, self.psf, RENDER_SIZE)

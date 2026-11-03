@@ -5,9 +5,10 @@ the page displays it, for a generous field and magnitude limit; the page filters
 to the student's field. Output (never committed; published as a snapshots-* release):
   <out>/index.json and <out>/<NAME>.csv  (columns: showclusters.REQUIRED)
 
-Sources: ESA's archive (gaiadr3.gaia_source, what the desktop app uses) through its
-asynchronous job queue, or GAVO's copy (gaia.dr3lite). `auto` tries ESA and falls back
-to GAVO per cluster. Re-runnable: valid existing snapshots are kept.
+Sources: GAVO's copy of Gaia DR3 (gaia.dr3lite), split into pieces small enough for its
+quick endpoint, or ESA's archive (gaiadr3.gaia_source, what the desktop app uses) through
+its asynchronous job queue. `auto` tries GAVO, then ESA, per cluster; the two agree.
+Re-runnable: valid existing snapshots are kept.
 
 Usage:
   .venv/bin/python scripts/build_snapshots.py [--out DIR] [--source auto|esa|gavo]
@@ -22,6 +23,7 @@ import io
 import json
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -52,7 +54,14 @@ PLAN.update({f"M{n}": (1.0, 17.0) for n in OPEN})
 PLAN.update({name: (1.0, 17.0) for name in OTHER})
 PLAN.update({"M44": (2.0, 18.0), "M45": (2.0, 18.0), "NGC104": (0.6, 17.0)})
 
-Fetch = Callable[[str], bytes]
+Table = dict[str, np.ndarray]
+FieldFetch = Callable[[float, float, float, float], Table]  # (ra_hours, dec, fov, maxmag) → stars
+ESA_ATTEMPTS = 2  # ESA's 500s on dense fields repeat; retrying longer only delays the GAVO fallback
+SHRINK_STEPS = 2  # if every source fails, lower the magnitude limit by 2, up to this many times
+
+
+class GavoTimeoutError(RuntimeError):
+    """GAVO's quick endpoint gave up (~20 s); the same query will time out again."""
 
 
 def fetch_esa(adql: str) -> bytes:
@@ -70,21 +79,30 @@ def fetch_gavo(adql: str) -> bytes:
     body = urllib.parse.urlencode(
         {"REQUEST": "doQuery", "LANG": "ADQL", "FORMAT": "csv", "MAXREC": str(sc.MAX_ROWS), "QUERY": adql}
     ).encode()
-    with urllib.request.urlopen(GAVO_TAP, body, timeout=300) as response:  # noqa: S310 - fixed https URL
-        if "csv" not in response.headers.get("content-type", ""):
-            raise RuntimeError(f"GAVO returned {response.headers.get('content-type')}")
-        return bytes(response.read())
+    try:
+        with urllib.request.urlopen(GAVO_TAP, body, timeout=300) as response:  # noqa: S310 - fixed https URL
+            if "csv" not in response.headers.get("content-type", ""):
+                raise RuntimeError(f"GAVO returned {response.headers.get('content-type')}")
+            return bytes(response.read())
+    except urllib.error.HTTPError as error:
+        if b"timed out" in error.read():
+            raise GavoTimeoutError("GAVO query timed out") from None
+        raise
 
 
-FETCHERS: dict[str, tuple[str, Fetch]] = {"esa": ("esa", fetch_esa), "gavo": ("gavo", fetch_gavo)}
-
-
-def with_retries(fetch: Fetch, adql: str, sleep: Callable[[float], None] = time.sleep) -> bytes:
-    for attempt in range(1, ATTEMPTS + 1):
+def with_retries(
+    fetch: Callable[[str], bytes],
+    adql: str,
+    sleep: Callable[[float], None] = time.sleep,
+    attempts: int = ATTEMPTS,
+) -> bytes:
+    for attempt in range(1, attempts + 1):
         try:
             return fetch(adql)
+        except GavoTimeoutError:
+            raise  # retrying the same query cannot help; the caller splits it instead
         except Exception as error:  # outages surface as many exception types
-            if attempt == ATTEMPTS:
+            if attempt == attempts:
                 raise
             wait = 30 * attempt
             print(f"  {type(error).__name__}: {str(error)[:200]}; retrying in {wait}s", flush=True)
@@ -92,46 +110,83 @@ def with_retries(fetch: Fetch, adql: str, sleep: Callable[[float], None] = time.
     raise AssertionError("unreachable")
 
 
+def esa_field(
+    fetch: Callable[[str], bytes] = fetch_esa, sleep: Callable[[float], None] = time.sleep
+) -> FieldFetch:
+    def run(ra: float, dec: float, fov: float, maxmag: float) -> Table:
+        data = with_retries(fetch, sc.gaia_adql(ra, dec, fov, maxmag, "esa"), sleep, ESA_ATTEMPTS)
+        return sc.assemble([sc.parse_gaia_table(data, "esa.csv")], ra, dec, fov, maxmag)
+
+    return run
+
+
+def gavo_field(
+    fetch: Callable[[str], bytes] = fetch_gavo, sleep: Callable[[float], None] = time.sleep
+) -> FieldFetch:
+    """The field in pieces small enough for GAVO's quick endpoint (as the web page does)."""
+
+    def run(ra: float, dec: float, fov: float, maxmag: float) -> Table:
+        pending = sc.field_tiles(ra, dec, fov, maxmag, "gavo")
+        tables: list[Table] = []
+        while pending:
+            tile = pending.pop()
+            try:
+                data = with_retries(fetch, tile["query"], sleep)
+            except GavoTimeoutError:
+                smaller = sc.split_tile(tile, ra, dec, maxmag, "gavo")
+                if not smaller:
+                    raise
+                pending.extend(smaller)
+                continue
+            tables.append(sc.parse_gaia_table(data, "gavo.csv"))
+        return sc.assemble(tables, ra, dec, fov, maxmag)  # identical to one query's result
+
+    return run
+
+
+FIELDS: dict[str, Callable[[], FieldFetch]] = {"esa": esa_field, "gavo": gavo_field}
+
+
 def build_one(
     name: str,
     out: Path,
     today: str,
     sources: list[str],
-    fetchers: Mapping[str, tuple[str, Fetch]] = FETCHERS,
-    sleep: Callable[[float], None] = time.sleep,
+    fields: Mapping[str, FieldFetch] | None = None,
 ) -> dict:
+    fetchers = fields or {source: FIELDS[source]() for source in sources}
     fov, maxmag = PLAN[name]
     position = sc.lookup_object(name, ROOT / "csv")
     ra_text, dec_text = sc.format_sexagesimal(position.ra_hours), sc.format_sexagesimal(position.dec_deg)
     ra, dec = sc.parse_sexagesimal(ra_text), sc.parse_sexagesimal(dec_text)
     errors: list[str] = []
-    for source in sources:
-        service, fetch = fetchers[source]
-        limit = maxmag
-        try:
-            while True:
-                data = with_retries(fetch, sc.gaia_adql(ra, dec, fov, limit, service), sleep)
-                table = sc.parse_gaia_table(data, f"{name}.csv")
-                if len(table["ra"]) <= MAX_SNAPSHOT_ROWS or limit <= 12:
-                    break
-                print(f"  {len(table['ra']):,} rows at G < {limit}; lowering the limit", flush=True)
-                limit -= 1
-        except Exception as error:
-            errors.append(f"{source}: {type(error).__name__}: {str(error)[:200]}")
-            print(f"  {source} failed; {'trying next source' if source != sources[-1] else 'giving up'}")
-            continue
-        path = out / f"{position.name}.csv"
-        write_csv(path, table)
-        return {
-            "file": path.name,
-            "ra": ra_text,
-            "dec": dec_text,
-            "fov": fov,
-            "maxmag": limit,
-            "rows": len(table["ra"]),
-            "date": today,
-            "source": source.upper(),
-        }
+    for step in range(SHRINK_STEPS + 1):
+        limit = maxmag - 2 * step
+        if step:
+            print(f"  every source failed; trying again with G < {limit}", flush=True)
+        for source in sources:
+            try:
+                table = fetchers[source](ra, dec, fov, limit)
+                while len(table["ra"]) > MAX_SNAPSHOT_ROWS and limit > 12:
+                    print(f"  {len(table['ra']):,} rows at G < {limit}; lowering the limit", flush=True)
+                    limit -= 1
+                    table = fetchers[source](ra, dec, fov, limit)
+            except Exception as error:
+                errors.append(f"{source} (G < {limit}): {type(error).__name__}: {str(error)[:200]}")
+                print(f"  {source} failed: {type(error).__name__}", flush=True)
+                continue
+            path = out / f"{position.name}.csv"
+            write_csv(path, table)
+            return {
+                "file": path.name,
+                "ra": ra_text,
+                "dec": dec_text,
+                "fov": fov,
+                "maxmag": limit,
+                "rows": len(table["ra"]),
+                "date": today,
+                "source": source.upper(),
+            }
     raise RuntimeError("; ".join(errors))
 
 
@@ -156,7 +211,8 @@ def main(argv: list[str] | None = None) -> int:
     unknown = [n for n in names if n not in PLAN]
     if unknown:
         raise SystemExit(f"Not in the snapshot plan: {', '.join(unknown)}")
-    sources = ["esa", "gavo"] if args.source == "auto" else [args.source]
+    # GAVO answers split queries in seconds; ESA's job queue is slow and fails on dense fields.
+    sources = ["gavo", "esa"] if args.source == "auto" else [args.source]
     if args.dry_run:
         for name in names:
             print(f"{name}: FOV {PLAN[name][0]}°, G < {PLAN[name][1]}, from {' then '.join(sources)}")

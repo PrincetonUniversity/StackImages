@@ -24,6 +24,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).parent / "fixtures"
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(Path(__file__).parent))
 
 playwright_api = pytest.importorskip("playwright.sync_api")
 if not (ROOT / "build" / "vendor" / "pyodide.mjs").is_file():
@@ -310,4 +311,57 @@ def test_all_steps_visible_before_any_data(browser, sites) -> None:  # type: ign
     page.click("#show-stars")
     page.wait_for_function("!document.getElementById('stars-content').hidden", timeout=60_000)
     assert page.is_hidden("#stars-empty") and page.is_enabled("#hr-button")
+    page.close()
+
+
+def fake_gavo(fake):  # type: ignore[no-untyped-def]
+    """Route GAVO requests to a FakeGaia, which filters by each query's circle."""
+
+    def handle(route) -> None:  # type: ignore[no-untyped-def]
+        query = parse_qs(route.request.post_data or "")["QUERY"][0]
+        status, body = fake.answer(query)
+        kind = "text/csv" if status == 200 else "text/xml"
+        route.fulfill(
+            status=status, body=body, headers={"content-type": kind, "access-control-allow-origin": "*"}
+        )
+
+    return handle
+
+
+def stars_shown(page) -> str:  # type: ignore[no-untyped-def]
+    page.wait_for_function("!document.getElementById('stars-content').hidden", timeout=90_000)
+    return page.text_content("#count") or ""
+
+
+@pytest.mark.parametrize("timeout_radius", [0.11, 0.06])  # one level of splitting, then two
+def test_split_field_shows_the_same_result_as_one_query(browser, sites, timeout_radius: float) -> None:  # type: ignore[no-untyped-def]
+    from fakegaia import FakeGaia
+
+    results = []
+    for fake in (FakeGaia(), FakeGaia(timeout_radius=timeout_radius)):
+        page = open_page(browser, sites["without"], fake_gavo(fake))
+        enter_m13(page)
+        page.click("#show-stars")
+        results.append((stars_shown(page), page.text_content("#brightest"), len(fake.queries)))
+        page.click("#hr-button")
+        page.wait_for_function("!document.getElementById('hr').hidden")
+        assert page.errors == []  # type: ignore[attr-defined]
+        page.close()
+    (whole_count, whole_bright, whole_queries), (split_count, split_bright, split_queries) = results
+    assert whole_queries == 1 and split_queries > 1
+    assert split_count == whole_count == "1,369"
+    assert split_bright == whole_bright
+
+
+def test_too_dense_field_says_so(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    from fakegaia import FakeGaia
+
+    fake = FakeGaia(timeout_radius=0.0)  # every query times out, however small
+    page = open_page(browser, sites["without"], fake_gavo(fake))
+    enter_m13(page)
+    page.click("#show-stars")
+    page.wait_for_selector("#error:not([hidden])", timeout=90_000)
+    assert "too many stars" in (page.text_content("#error") or "")
+    assert "unavailable" not in (page.text_content("#error") or "")
+    assert len(fake.queries) > 5  # it split before giving up
     page.close()
