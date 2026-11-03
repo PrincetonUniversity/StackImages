@@ -39,8 +39,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-compose-action@v1
+      - uses: actions/checkout@v7
+      - uses: docker/setup-compose-action@v2
         with:
           version: v2.39.4
       - name: Provide docker-compose command
@@ -69,7 +69,7 @@ jobs:
         run: docker-compose run --rm -T web-tools python -c "import sys; sys.path[:0] = ['scripts', 'web']; import build_site; print(len(build_site.check_snapshots(__import__('pathlib').Path('build/snapshots'))), 'snapshots valid')"
       - name: Package snapshots
         run: tar -czf snapshots.tar.gz -C build/snapshots .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: snapshots
           path: |
@@ -88,7 +88,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: snapshots
       - name: Publish release

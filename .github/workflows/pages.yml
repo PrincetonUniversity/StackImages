@@ -62,8 +62,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-compose-action@v1
+      - uses: actions/checkout@v7
+      - uses: docker/setup-compose-action@v2
         with:
           version: v2.39.4
       - name: Provide docker-compose command
@@ -75,7 +75,7 @@ jobs:
       - name: Python lint, format and type checks (ruff, mypy)
         run: docker-compose run --rm -T web-tools sh -c "ruff check web scripts tests && ruff format --check web scripts tests && mypy"
       - name: Cache Pyodide
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: build/vendor
           key: pyodide-${{ hashFiles('scripts/vendor_pyodide.py') }}
@@ -108,9 +108,9 @@ jobs:
         run: docker-compose run --rm -T web-tools python scripts/build_site.py ${{ steps.snapshots.outputs.args }}
       - name: Zip the site for hosting elsewhere (served as StackImages-web.zip)
         run: docker-compose run --rm -T web-tools python scripts/zip_site.py
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         if: github.event_name != 'pull_request'
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: github.event_name != 'pull_request'
         with:
           path: _site
@@ -127,4 +127,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
