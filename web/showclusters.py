@@ -277,11 +277,13 @@ def _read_csv(data: bytes) -> dict[str, np.ndarray]:
         text = data.decode("utf-8-sig")
     except UnicodeDecodeError:
         raise InputError("The file is not a CSV, VOTable or FITS table.") from None
-    reader = csv.reader(io.StringIO(text))
-    header = [h.strip().lower().removeprefix("gaia.") for h in next(reader, [])]
+    # '#' lines are comments (our own downloads carry their provenance and credit there).
+    numbered = [(n, line) for n, line in enumerate(text.splitlines(), start=1) if not line.startswith("#")]
+    rows = csv.reader(line for _, line in numbered)
+    header = [h.strip().lower().removeprefix("gaia.") for h in next(rows, [])]
     wanted = {name: i for i, name in enumerate(header)}
     values: dict[str, list[float]] = {name: [] for name in wanted}
-    for line, row in enumerate(reader, start=2):
+    for (line, _), row in zip(numbered[1:], rows, strict=False):
         if not row:
             continue
         if len(row) != len(header):
@@ -359,6 +361,7 @@ class Stars:
     parallax: np.ndarray
     pm_ra: np.ndarray
     pm_dec: np.ndarray
+    hyg: np.ndarray  # True for the HYG bright stars ass.py adds (V and B-V rather than G and BP-RP)
 
     def subset(self, keep: np.ndarray) -> Stars:
         return Stars(**{k: v[keep] for k, v in self.__dict__.items()})
@@ -419,6 +422,7 @@ def select_stars(
         parallax=np.concatenate([parallax[keep], np.zeros(int(near.sum()), dtype=f32)]),
         pm_ra=join(pm_ra, b[:, 5] / 15),
         pm_dec=join(pm_dec, b[:, 6]),
+        hyg=np.concatenate([np.zeros(int(keep.sum()), dtype=bool), np.ones(int(near.sum()), dtype=bool)]),
     )
 
 
@@ -554,6 +558,7 @@ def hr_arrays(stars: Stars, magnitude_type: str) -> dict[str, np.ndarray]:
     n = len(mag0)
     if n == 0:
         raise InputError("No stars to plot. Click Show Stars first, or widen the field.")
+    k = -1  # the point replaced in Absolute mode, if any
     if magnitude_type == "Absolute":
         k = int(np.argmin(mag0))
         mag0[k], coloridx[k] = mag0[n - 1], coloridx[n - 1]
@@ -577,6 +582,8 @@ def hr_arrays(stars: Stars, magnitude_type: str) -> dict[str, np.ndarray]:
         "s": diam[keep],
         "c": colors[keep],
         "limits": np.array([minmag, maxmag], dtype=np.float64),
+        "index": np.nonzero(keep)[0],  # which star (position in `stars`) each point belongs to
+        "replaced": np.array([k]),  # in Absolute mode, point k shows star n-1 instead of star k
     }
 
 
@@ -607,6 +614,137 @@ def hr_png(stars: Stars, magnitude_type: str, title: str, source: str) -> bytes:
     out = io.BytesIO()
     fig.savefig(out, format="png", facecolor="black")
     return out.getvalue()
+
+
+# --- Downloads: the star data and the HR diagram points, with credit ----------------------
+
+PAGE_URL = "https://princetonuniversity.github.io/StackImages/ShowClusters/"
+GAIA_CREDIT = (
+    "Gaia DR3 data: ESA/Gaia/DPAC, licence CC BY-NC 3.0 IGO (https://www.cosmos.esa.int/web/gaia-users/license).",
+    "This work has made use of data from the European Space Agency (ESA) mission Gaia "
+    "(https://www.cosmos.esa.int/gaia), processed by the Gaia Data Processing and Analysis Consortium "
+    "(DPAC, https://www.cosmos.esa.int/web/gaia/dpac/consortium). Funding for the DPAC has been provided "
+    "by national institutions, in particular the institutions participating in the Gaia Multilateral "
+    "Agreement.",
+    "Cite: Gaia Collaboration, Prusti et al. 2016, A&A 595, A1; "
+    "Gaia Collaboration, Vallenari et al. 2023, A&A 674, A1.",
+)
+HYG_CREDIT = (
+    "Bright stars: HYG database v3 (David Nash, https://codeberg.org/astronexus/hyg), licence CC BY-SA 2.5.",
+)
+GAVO_CREDIT = (
+    "Served by the German Astrophysical Virtual Observatory (GAVO, https://dc.g-vo.org/, table gaia.dr3lite)."
+)
+
+
+def _value(value: float, digits: str = "64") -> str:
+    """Shortest exact text for a number; empty for missing values."""
+    if not math.isfinite(value):
+        return ""
+    return np.format_float_positional(np.float64(value) if digits == "64" else np.float32(value), trim="-")
+
+
+def _source_tag(source: str) -> str:
+    if "uploaded" in source:
+        return "upload"
+    if "saved" in source:
+        return "saved-" + ("GAVO" if "GAVO" in source.split("from", 1)[-1] else "ESA")
+    return "GAVO" if "GAVO" in source else "ESA"
+
+
+def _slug(text: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", text).strip("-")
+    return slug if re.fullmatch(r"(M|NGC|IC)\d+", slug) else "field"
+
+
+def _csv_text(comments: list[str], header: list[str], rows: Any) -> bytes:
+    out = io.StringIO()
+    for line in comments:
+        out.write(f"# {line}\n")
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(header)
+    writer.writerows(rows)
+    return out.getvalue().encode()
+
+
+def star_data_csv(
+    gaia: dict[str, np.ndarray], title: str, field: tuple[str, str, float, float], source: str, date: str
+) -> tuple[str, bytes]:
+    """The field's Gaia rows as used, in ESA's columns; uploading it reproduces the result."""
+    ra_text, dec_text, fov, maxmag = field
+    comments = [
+        f"Show Clusters star data: {title}, RA {ra_text}, Dec {dec_text}, FOV {fov:g} deg, G < {maxmag:g}.",
+        f"Source: {source}; saved {date} from {PAGE_URL}",
+        *([GAVO_CREDIT] if "GAVO" in source else []),
+        *GAIA_CREDIT,
+        "Columns as in ESA's gaiadr3.gaia_source: ra, dec (deg), parallax (mas), phot_g_mean_mag (G), "
+        "bp_rp, pmra, pmdec (mas/yr). Upload this file to Show Clusters to reproduce this result.",
+    ]
+    rows = ([_value(float(v)) for v in values] for values in zip(*(gaia[c] for c in REQUIRED), strict=True))
+    name = f"{_slug(title)}_FOV{fov:g}_G{maxmag:g}_{_source_tag(source)}_{date}_stars.csv"
+    return name, _csv_text(comments, list(REQUIRED), rows)
+
+
+def hr_table(stars: Stars, magnitude_type: str) -> dict[str, np.ndarray]:
+    """Per star in the picture: the HR diagram's x and y, and whether the diagram draws it."""
+    # "drawn" comes from the diagram's own point sizes, so it cannot drift from the picture:
+    # ass.py skips the first star, gives the faintest star size 0, and in Absolute mode
+    # replaces the brightest star's point with the last star's.
+    data = hr_arrays(stars, magnitude_type)
+    y = (stars.mag if magnitude_type == "Apparent" else stars.absmag).astype(np.float32)
+    x = (1.25 * (stars.coloridx - 1.0)).astype(np.float32)
+    drawn = np.zeros(len(y), dtype=bool)
+    drawn[data["index"][data["s"] > 0]] = True
+    replaced = int(data["replaced"][0])
+    if replaced >= 0:
+        drawn[replaced] = False
+    return {"x": x, "y": y, "drawn": drawn}
+
+
+def hr_points_csv(stars: Stars, magnitude_type: str, title: str, source: str, date: str) -> tuple[str, bytes]:
+    table = hr_table(stars, magnitude_type)
+    comments = [
+        f"Show Clusters HR diagram points: {title}, {magnitude_type} magnitude, "
+        "one row per star in the picture.",
+        f"Source: {source}; saved {date} from {PAGE_URL}",
+        "Gaia rows: apparent_mag = G, color_index = BP-RP. HYG rows (bright stars added as in the "
+        "desktop app): apparent_mag = V, color_index = B-V; parallax blank.",
+        "x_plotted = 1.25 * (color_index - 1), y_plotted = the magnitude shown. drawn = false for the "
+        "stars the diagram leaves out, following the desktop app (the first star; in Absolute mode, "
+        "the brightest).",
+        *([GAVO_CREDIT] if "GAVO" in source else []),
+        *GAIA_CREDIT,
+        *HYG_CREDIT,
+    ]
+    header = [
+        "catalog",
+        "ra_deg",
+        "dec_deg",
+        "parallax_mas",
+        "apparent_mag",
+        "absolute_mag",
+        "color_index",
+        "x_plotted",
+        "y_plotted",
+        "drawn",
+    ]
+    rows = (
+        [
+            "HYG" if stars.hyg[i] else "Gaia DR3",
+            _value(float(stars.ra[i]) * 15, "32"),
+            _value(float(stars.dec[i]), "32"),
+            "" if stars.hyg[i] else _value(float(stars.parallax[i]), "32"),
+            _value(float(stars.mag[i]), "32"),
+            _value(float(stars.absmag[i]), "32"),
+            _value(float(stars.coloridx[i]), "32"),
+            _value(float(table["x"][i]), "32"),
+            _value(float(table["y"][i]), "32"),
+            "true" if table["drawn"][i] else "false",
+        ]
+        for i in range(len(stars.mag))
+    )
+    name = f"{_slug(title)}_HR_{magnitude_type}_points.csv"
+    return name, _csv_text(comments, header, rows)
 
 
 # --- Filtering saved or uploaded results to the requested field -------------------------
@@ -674,6 +812,8 @@ class Session:
     title: str = ""
     source: str = ""
     _field: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    gaia: dict[str, np.ndarray] | None = None  # the field's Gaia rows, as used
+    field_text: tuple[str, str, float, float] = ("", "", 0.0, 0.0)
 
     def lookup(self, name: str) -> dict[str, Any]:
         found = lookup_object(name, self.catalog_dir)
@@ -744,6 +884,8 @@ class Session:
         image = render_field(frame, self.psf, RENDER_SIZE)
         base, pct_lo, pct_hi = display_base(image)
         self.frame, self.title, self.source = frame, title, source
+        self.gaia = gaia
+        self.field_text = (ra_text, dec_text, fov, maxmag)
         return {
             "count": frame.count,
             "brightest": None if math.isnan(frame.brightest) else round(frame.brightest, 2),
@@ -754,6 +896,20 @@ class Session:
             "pct_hi": pct_hi,
             "image": base.tobytes(),
         }
+
+    def star_data(self, date: str) -> dict[str, Any]:
+        """Download: the field's Gaia rows exactly as used (re-uploadable)."""
+        if self.gaia is None:
+            raise InputError("Click Show Stars first.")
+        name, data = star_data_csv(self.gaia, self.title, self.field_text, self.source, date)
+        return {"name": name, "data": data}
+
+    def hr_points(self, magnitude_type: str, date: str) -> dict[str, Any]:
+        """Download: the HR diagram's points, one row per star in the picture."""
+        if self.frame is None:
+            raise InputError("Click Show Stars first.")
+        name, data = hr_points_csv(self.frame.stars, magnitude_type, self.title, self.source, date)
+        return {"name": name, "data": data}
 
     def hr_diagram(self, magnitude_type: str) -> bytes:
         if self.frame is None:

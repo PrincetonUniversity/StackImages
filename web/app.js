@@ -34,6 +34,10 @@ const magtype = /** @type {HTMLSelectElement} */ ($("magtype"));
 const hrButton = /** @type {HTMLButtonElement} */ ($("hr-button"));
 const hrImage = /** @type {HTMLImageElement} */ ($("hr"));
 const hrDownload = /** @type {HTMLAnchorElement} */ ($("hr-download"));
+const hrDownloads = $("hr-downloads");
+const hrCredit = $("hr-credit");
+const dataDownload = /** @type {HTMLAnchorElement} */ ($("data-download"));
+const hrCsvDownload = /** @type {HTMLAnchorElement} */ ($("hr-csv-download"));
 const skyDownload = /** @type {HTMLAnchorElement} */ ($("sky-download"));
 const adql = $("adql");
 const copyButton = /** @type {HTMLButtonElement} */ ($("copy-adql"));
@@ -360,7 +364,8 @@ function displayStars(result, source) {
   sliders.gamma.value = "2";
   magtype.value = "Apparent"; // ass.py resets the magnitude type on Show Stars
   hrImage.hidden = true;
-  hrDownload.hidden = true;
+  hrDownloads.hidden = true;
+  hrCredit.hidden = true;
   starsContent.hidden = false;
   starsEmpty.hidden = true;
   draw();
@@ -438,7 +443,8 @@ async function onHrDiagram() {
   busy = true;
   clearError();
   hrImage.hidden = true; // never show a diagram that doesn't match the current choice
-  hrDownload.hidden = true;
+  hrDownloads.hidden = true;
+  hrCredit.hidden = true;
   refresh();
   setStatus("Drawing the HR diagram…");
   try {
@@ -449,13 +455,49 @@ async function onHrDiagram() {
     hrImage.hidden = false;
     hrDownload.href = hrUrl;
     hrDownload.download = `${objectName || "field"}_HR_${magtype.value}.png`;
-    hrDownload.hidden = false;
+    hrDownloads.hidden = false;
+    hrCredit.hidden = false;
+    hrMagnitudeType = magtype.value;
     setStatus("HR diagram ready. Use Download HR diagram to save it.");
   } catch (error) {
     report(error, "The HR diagram could not be drawn");
   } finally {
     busy = false;
     refresh();
+  }
+}
+
+// ---- CSV downloads: the star data used, and the HR diagram's points --------------------
+
+/** The diagram's magnitude type, so its CSV matches what is shown even if the menu changed. */
+let hrMagnitudeType = "Apparent";
+
+/** Today's date in the student's own time zone, for file names. */
+function today() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+/** @param {Uint8Array<ArrayBuffer>} data @param {string} name */
+function saveFile(data, name) {
+  const url = URL.createObjectURL(new Blob([data], { type: "text/csv;charset=utf-8" }));
+  const link = Object.assign(document.createElement("a"), { href: url, download: name });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+/** @param {string} action @param {Record<string, unknown>} args @param {string} what */
+async function downloadCsv(action, args, what) {
+  if (!ready || busy) return;
+  clearError();
+  try {
+    const file = /** @type {{name: string, data: Uint8Array<ArrayBuffer>}} */ (await call(action, { ...args, date: today() }));
+    saveFile(file.data, file.name);
+    setStatus(`Saved ${what} as ${file.name}.`);
+  } catch (error) {
+    report(error, `The ${what} could not be saved`);
   }
 }
 
@@ -483,6 +525,14 @@ form.addEventListener("submit", (event) => {
 });
 for (const slider of Object.values(sliders)) slider.addEventListener("input", queueDraw);
 hrButton.addEventListener("click", () => void onHrDiagram());
+dataDownload.addEventListener("click", (event) => {
+  event.preventDefault();
+  void downloadCsv("starData", {}, "star data");
+});
+hrCsvDownload.addEventListener("click", (event) => {
+  event.preventDefault();
+  void downloadCsv("hrPoints", { magnitudeType: hrMagnitudeType }, "HR diagram points");
+});
 lookupButton.addEventListener("click", () => void lookup());
 fileInput.addEventListener("change", refresh);
 useFile.addEventListener("click", () => void onUseFile());

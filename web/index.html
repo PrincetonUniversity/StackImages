@@ -69,7 +69,12 @@
         <label for="maxi">max <output id="maxi-value"></output></label>
         <input id="maxi" type="range" step="any">
       </div>
-      <div class="actions"><a id="sky-download" class="download secondary" href="#">Download picture (PNG)</a></div>
+      <div class="actions">
+        <a id="sky-download" class="download secondary" href="#">Download picture (PNG)</a>
+        <a id="data-download" class="download secondary" href="#">Download star data (CSV)</a>
+      </div>
+      <p class="hint">The star data file can be uploaded again (bottom of the page) to reproduce this result.</p>
+      <p class="credit">Star data: ESA/Gaia/DPAC, <a href="https://www.cosmos.esa.int/web/gaia-users/license" target="_blank" rel="noopener">CC BY-NC 3.0 IGO</a>. Each CSV file lists the full credit and how to cite Gaia.</p>
       </div>
     </section>
 
@@ -82,7 +87,14 @@
         <button id="hr-button" type="button">HR Diagram</button>
       </div>
       <img id="hr" alt="Hertzsprung–Russell diagram of the stars shown above" hidden>
-      <div class="actions"><a id="hr-download" class="download" href="#" hidden>Download HR diagram (PNG)</a></div>
+      <div id="hr-downloads" class="actions" hidden>
+        <a id="hr-download" class="download" href="#">Download HR diagram (PNG)</a>
+        <a id="hr-csv-download" class="download secondary" href="#">Download HR points (CSV)</a>
+      </div>
+      <p id="hr-credit" class="credit" hidden>Star data: ESA/Gaia/DPAC,
+        <a href="https://www.cosmos.esa.int/web/gaia-users/license" target="_blank" rel="noopener">CC BY-NC 3.0 IGO</a>;
+        bright stars: HYG database v3 by David Nash,
+        <a href="https://creativecommons.org/licenses/by-sa/2.5/" target="_blank" rel="noopener">CC BY-SA 2.5</a>.</p>
     </section>
 
     <section class="panel" aria-labelledby="upload-heading">
@@ -106,6 +118,14 @@
     </section>
 
     <footer>
+      <p>This work has made use of data from the European Space Agency (ESA) mission
+        <a href="https://www.cosmos.esa.int/gaia" target="_blank" rel="noopener">Gaia</a>, processed by the Gaia Data
+        Processing and Analysis Consortium (<a href="https://www.cosmos.esa.int/web/gaia/dpac/consortium" target="_blank" rel="noopener">DPAC</a>).
+        Funding for the DPAC has been provided by national institutions, in particular the institutions participating
+        in the Gaia Multilateral Agreement. Gaia data: ESA/Gaia/DPAC,
+        <a href="https://www.cosmos.esa.int/web/gaia-users/license" target="_blank" rel="noopener">CC BY-NC 3.0 IGO</a>.
+        Bright stars: <a href="https://codeberg.org/astronexus/hyg" target="_blank" rel="noopener">HYG database</a> v3
+        by David Nash, <a href="https://creativecommons.org/licenses/by-sa/2.5/" target="_blank" rel="noopener">CC BY-SA 2.5</a>.</p>
       <p>Star data: Gaia DR3 (ESA), served live by the German Astrophysical Virtual Observatory
         (<a href="https://dc.g-vo.org/" target="_blank" rel="noopener">GAVO</a>), with saved copies from the
         <a href="https://gea.esac.esa.int/archive/" target="_blank" rel="noopener">ESA Gaia archive</a> as a fallback;

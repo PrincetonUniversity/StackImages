@@ -130,15 +130,6 @@ def test_merge_removes_overlap_duplicates_only() -> None:
 # --- the whole pipeline: one query vs. pieces -------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def session() -> sc.Session:
-    from astropy.io import fits
-
-    bright = np.array(sc.bright_star_rows(ROOT / "csv" / "hygdata_v3.csv"))
-    psf = sc.scale_psf(sc.prepare_psf(fits.getdata(ROOT / "fit" / "sxv_psf4-RGB.fit")), sc.RENDER_SIZE)
-    return sc.Session(ROOT / "csv", bright, psf)
-
-
 RA_TEXT, DEC_TEXT, FOV, MAXMAG = "+16 : 41 : 42", "+36 : 27 : 39", 0.2, 16.0  # M13, the fixtures' field
 
 
