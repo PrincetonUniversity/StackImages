@@ -82,7 +82,16 @@
       <ul id="notes" class="notes"></ul>
       <div class="viewer" role="region" aria-label="Star field and picture controls">
         <button id="exit-fullscreen" type="button" class="exit" aria-label="Exit full screen" hidden>✕ Exit full screen <span class="key">(Esc)</span></button>
-        <canvas id="sky" width="1200" height="1200" aria-label="Simulated view of the stars in the field"></canvas>
+        <div class="sky-frame">
+          <canvas id="sky" width="1200" height="1200" aria-label="Simulated view of the stars in the field"></canvas>
+          <button id="fullscreen" type="button" class="icon-button" aria-label="Full screen" aria-pressed="false"
+                  title="Full screen: the picture and sliders, as large as your screen allows" disabled>
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+              <path d="M5 19 19 5M13 5h6v6M11 19H5v-6" fill="none" stroke="currentColor" stroke-width="2.2"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
         <div class="controls">
           <div class="sliders">
             <label for="colsat">color saturation</label>
@@ -99,16 +108,23 @@
             <input id="maxi" type="range" step="any">
           </div>
           <div class="actions">
-            <button id="reset-sliders" type="button" class="secondary small" disabled>Reset sliders</button>
-            <button id="fullscreen" type="button" class="secondary small" aria-pressed="false" disabled>Full screen</button>
-          </div>
-          <div class="actions">
             <a id="sky-download" class="download secondary" href="#">Download picture (PNG)</a>
             <a id="data-download" class="download secondary" href="#">Download star data (CSV)</a>
           </div>
           <p class="hint">The star data file can be uploaded again (step 1, “Or use a file…”) to reproduce this result.</p>
+          <div class="reset-row">
+            <button id="reset-sliders" type="button" class="secondary small" disabled>Reset sliders</button>
+          </div>
           <p class="credit">Star data: ESA/Gaia/DPAC, <a href="https://www.cosmos.esa.int/web/gaia-users/license" target="_blank" rel="noopener">CC BY-NC 3.0 IGO</a>. Each CSV file lists the full credit and how to cite Gaia.</p>
         </div>
+        <dialog id="reset-confirm" aria-labelledby="reset-title" aria-describedby="reset-text">
+          <h3 id="reset-title">Reset the sliders?</h3>
+          <p id="reset-text">They go back to where they were when the stars were first shown. Your current settings are lost unless you have downloaded them.</p>
+          <div class="dialog-actions">
+            <button id="reset-cancel" type="button" class="secondary" autofocus>Keep my settings</button>
+            <button id="reset-ok" type="button">Reset sliders</button>
+          </div>
+        </dialog>
       </div>
       </div>
     </section>

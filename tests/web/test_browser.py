@@ -596,7 +596,7 @@ def test_picture_and_sliders_fit_on_screen_together(browser, sites, width: int, 
     stars_shown(page)
     span = page.evaluate(
         """() => {
-            const ids = ['sky', 'colsat', 'gamma', 'mini', 'maxi', 'reset-sliders'];
+            const ids = ['sky', 'colsat', 'gamma', 'mini', 'maxi', 'fullscreen'];
             const boxes = ids.map((id) => document.getElementById(id).getBoundingClientRect());
             const min = (key) => Math.min(...boxes.map((b) => b[key]));
             const max = (key) => Math.max(...boxes.map((b) => b[key]));
@@ -610,7 +610,23 @@ def test_picture_and_sliders_fit_on_screen_together(browser, sites, width: int, 
     page.close()
 
 
-def test_reset_puts_the_sliders_back(browser, sites) -> None:  # type: ignore[no-untyped-def]
+def move_sliders(page, ids: list[str]) -> None:  # type: ignore[no-untyped-def]
+    for slider in ids:
+        page.evaluate(
+            "(id) => { const s = document.getElementById(id); s.value = s.min;"
+            " s.dispatchEvent(new Event('input')); }",
+            slider,
+        )
+    page.wait_for_timeout(100)
+
+
+def confirm_reset(page) -> None:  # type: ignore[no-untyped-def]
+    page.click("#reset-sliders")
+    page.get_by_role("dialog").get_by_role("button", name="Reset sliders").click()
+    page.wait_for_function("!document.getElementById('reset-confirm').open")
+
+
+def test_reset_puts_the_sliders_back_after_asking(browser, sites) -> None:  # type: ignore[no-untyped-def]
     page = open_page(browser, sites["without"], gavo_ok([]))
     enter_m13(page)
     page.click("#show-stars")
@@ -619,19 +635,108 @@ def test_reset_puts_the_sliders_back(browser, sites) -> None:  # type: ignore[no
     snapshot = "(ids) => ids.map((id) => document.getElementById(id).value)"
     pixels = "() => document.getElementById('sky').toDataURL()"
     initial, initial_picture = page.evaluate(snapshot, ids), page.evaluate(pixels)
-    reset = page.get_by_role("button", name="Reset sliders")
-    for slider in ids:
-        page.evaluate(
-            "(id) => { const s = document.getElementById(id); s.value = s.min;"
-            " s.dispatchEvent(new Event('input')); }",
-            slider,
-        )
-    page.wait_for_timeout(100)
-    assert page.evaluate(snapshot, ids) != initial and page.evaluate(pixels) != initial_picture
-    reset.click()
-    page.wait_for_timeout(100)
+    move_sliders(page, ids)
+    moved, moved_picture = page.evaluate(snapshot, ids), page.evaluate(pixels)
+    assert moved != initial and moved_picture != initial_picture
+
+    # Clicking Reset asks first, in the page's own dialog (not window.confirm).
+    page.on("dialog", lambda d: pytest.fail(f"a browser dialog appeared: {d.message}"))
+    page.get_by_role("button", name="Reset sliders").click()
+    dialog = page.get_by_role("dialog", name="Reset the sliders?")
+    dialog.wait_for()
+    assert page.evaluate("document.activeElement.id") == "reset-cancel"  # the safe choice
+    assert page.evaluate(snapshot, ids) == moved
+    dialog.get_by_role("button", name="Keep my settings").click()
+    page.wait_for_function("!document.getElementById('reset-confirm').open")
+    assert page.evaluate(snapshot, ids) == moved and page.evaluate(pixels) == moved_picture
+    assert page.evaluate("document.activeElement.id") == "reset-sliders"
+
+    page.click("#reset-sliders")  # Esc also keeps them
+    dialog.wait_for()
+    page.keyboard.press("Escape")
+    page.wait_for_function("!document.getElementById('reset-confirm').open")
+    assert page.evaluate(snapshot, ids) == moved
+
+    confirm_reset(page)
     assert page.evaluate(snapshot, ids) == initial
     assert page.evaluate(pixels) == initial_picture  # the picture is back exactly as first drawn
+
+    page.click("#reset-sliders")  # nothing to lose: no question
+    page.wait_for_timeout(200)
+    assert not page.evaluate("document.getElementById('reset-confirm').open")
+    assert page.errors == []  # type: ignore[attr-defined]
+    page.close()
+
+
+def test_reset_is_set_apart_from_the_sliders(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    enter_m13(page)
+    page.click("#show-stars")
+    stars_shown(page)
+    layout = page.evaluate(
+        """() => {
+            const box = (id) => document.getElementById(id).getBoundingClientRect();
+            const after = (a, b) => Boolean(document.getElementById(a).compareDocumentPosition(
+                document.getElementById(b)) & Node.DOCUMENT_POSITION_FOLLOWING);
+            return { gap: box('reset-sliders').top - box('maxi').bottom,
+                     afterDownloads: after('data-download', 'reset-sliders') };
+        }"""
+    )
+    assert layout["afterDownloads"] and layout["gap"] >= 60, layout
+    page.close()
+
+
+def test_full_screen_is_an_icon_on_the_picture(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    enter_m13(page)
+    page.click("#show-stars")
+    stars_shown(page)
+    button = page.get_by_role("button", name="Full screen")
+    info = page.evaluate(
+        """() => {
+            const b = document.getElementById('fullscreen'), sky = document.getElementById('sky');
+            const r = b.getBoundingClientRect(), s = sky.getBoundingClientRect();
+            return { text: b.textContent.trim(), svg: Boolean(b.querySelector('svg')), title: b.title,
+                     inside: r.left >= s.left && r.right <= s.right && r.top >= s.top && r.bottom <= s.bottom,
+                     corner: s.right - r.right < 24 && r.top - s.top < 24, w: r.width, h: r.height };
+        }"""
+    )
+    assert info["text"] == "" and info["svg"] and "Full screen" in info["title"], info
+    assert info["inside"] and info["corner"], info  # top-right corner of the picture
+    assert info["w"] >= 32 and info["h"] >= 32, info  # an easy target
+    button.click()
+    page.wait_for_selector("#exit-fullscreen:visible")
+    assert page.is_hidden("#fullscreen")
+    page.click("#exit-fullscreen")
+    page.close()
+
+
+def test_reset_question_in_full_screen_is_on_top_and_dark(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    enter_m13(page)
+    page.click("#show-stars")
+    stars_shown(page)
+    move_sliders(page, ["gamma"])
+    page.click("#fullscreen")
+    page.wait_for_selector("#exit-fullscreen:visible")
+    page.click("#reset-sliders")
+    page.get_by_role("dialog", name="Reset the sliders?").wait_for()
+    state = page.evaluate(
+        """() => {
+            const d = document.getElementById('reset-confirm'), r = d.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            const bg = getComputedStyle(d).backgroundColor.match(/\\d+/g).slice(0, 3).map(Number);
+            return { onTop: d.contains(hit), bg };
+        }"""
+    )
+    assert state["onTop"] and max(state["bg"]) <= 48, state
+    ratios = page.evaluate(CONTRAST, ["#reset-confirm h3", "#reset-confirm p", "#reset-cancel", "#reset-ok"])
+    low = [(sel, round(ratio, 2)) for sel, ratio in ratios if ratio < 4.5]
+    assert low == [], low
+    page.click("#reset-ok")
+    page.wait_for_function("!document.getElementById('reset-confirm').open")
+    assert page.is_visible("#exit-fullscreen")  # still in full screen
+    page.click("#exit-fullscreen")
     page.close()
 
 
@@ -779,7 +884,7 @@ def test_star_data_brings_back_the_slider_positions(browser, sites, tmp_path: Pa
     assert fresh.evaluate("(ids) => ids.map((id) => document.getElementById(id).value)", SLIDERS) == tuned
     assert fresh.evaluate("document.getElementById('sky').toDataURL()") == tuned_picture  # pixel for pixel
     assert "Picture settings restored from the file." in (fresh.text_content("#notes") or "")
-    fresh.click("#reset-sliders")
+    confirm_reset(fresh)
     assert fresh.evaluate("(ids) => ids.map((id) => document.getElementById(id).value)", SLIDERS) == defaults
     assert fresh.errors == []  # type: ignore[attr-defined]
     fresh.close()
