@@ -8,6 +8,7 @@ import functools
 import http.server
 import json
 import os
+import re
 import shutil
 import socketserver
 import sys
@@ -90,6 +91,15 @@ def test_fingerprint_command(archive: Path, capsys: pytest.CaptureFixture[str]) 
     assert zip_site.main(["--fingerprint", str(archive)]) == 0
     assert capsys.readouterr().out.strip() == zip_site.fingerprint(archive)
     assert len(zip_site.fingerprint(archive)) == 64
+
+
+def test_every_source_map_named_is_shipped(site: Path) -> None:
+    """Browsers' developer tools fetch these; a missing one shows as a 404 in the console."""
+    scripts = list((site / "ShowClusters").rglob("*.js"))
+    assert scripts
+    for script in scripts:
+        for name in re.findall(r"//# sourceMappingURL=(\S+)\s*$", script.read_text(errors="replace"), re.M):
+            assert (script.parent / name).is_file(), f"{script.name} names {name}, which is not shipped"
 
 
 def test_pages_use_only_relative_links(site: Path) -> None:
