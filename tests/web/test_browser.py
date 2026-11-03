@@ -468,3 +468,43 @@ def test_footer_credits_gaia_and_hyg(browser, sites) -> None:  # type: ignore[no
     ):
         assert text in footer, text
     page.close()
+
+
+@pytest.mark.parametrize("width", [1100, 390])  # desktop and phone layouts
+def test_sliders_stay_put_while_values_change(browser, sites, width: int) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    page.set_viewport_size({"width": width, "height": 900})
+    enter_m13(page)
+    page.click("#show-stars")
+    stars_shown(page)
+    ids = ("colsat", "gamma", "mini", "maxi")
+
+    def boxes() -> list[tuple[float, float, float]]:
+        return page.evaluate(
+            "(ids) => ids.map((id) => { const r = document.getElementById(id).getBoundingClientRect();"
+            " return [r.x, r.y, r.width]; })",
+            list(ids),
+        )
+
+    before = boxes()
+    texts = set()
+    for slider in ids:
+        for end in ("min", "max"):
+            page.evaluate(
+                "([id, end]) => { const s = document.getElementById(id); s.value = s[end];"
+                " s.dispatchEvent(new Event('input')); }",
+                [slider, end],
+            )
+            page.wait_for_timeout(50)
+            texts.add(page.text_content(f"#{slider}-value"))
+            clipped = page.evaluate(
+                "(ids) => ids.filter((id) => { const o = document.getElementById(id + '-value');"
+                " return o.scrollWidth > o.clientWidth; })",
+                list(ids),
+            )
+            assert clipped == [], (slider, end, clipped)  # every value fits its column
+            after = boxes()
+            for (bx, by, bw), (ax, ay, aw) in zip(before, after, strict=True):
+                assert (ax, ay, aw) == pytest.approx((bx, by, bw), abs=0.5), (slider, end, before, after)
+    assert "59047.00" in texts  # the widest value (nonlinear stretch at its maximum) was shown
+    page.close()
