@@ -31,8 +31,22 @@ button:disabled { opacity: .45; cursor: not-allowed; }
    beside it on wide screens (controls stay in view while scrolling), below it on narrow ones,
    where the picture leaves room for the controls (~290px). */
 .viewer { display: grid; gap: 16px 20px; align-items: start; }
-#sky { display: block; justify-self: center; width: min(100%, calc(100svh - 290px)); height: auto;
-       aspect-ratio: 1; background: black; border-radius: 6px; }
+.sky-frame { position: relative; justify-self: center; width: min(100%, calc(100svh - 290px)); }
+#sky { display: block; width: 100%; height: auto; aspect-ratio: 1; background: black; border-radius: 6px; }
+/* Full screen: an icon on the picture's corner, like a video player's. Light on a dark,
+   translucent square, so it shows on the black sky and on bright stars alike. */
+.icon-button { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 40px; height: 40px;
+               padding: 0; color: #fff; background: rgba(0, 0, 0, .6); border: 1px solid rgba(255, 255, 255, .45);
+               border-radius: 8px; }
+.icon-button:hover { background: rgba(0, 0, 0, .85); }
+/* Reset sits apart, below the downloads, and asks first (#reset-confirm). */
+.reset-row { margin-top: 18px; padding-top: 14px; border-top: 1px solid #d7e1ea; }
+dialog { max-width: min(26rem, calc(100vw - 32px)); padding: 20px 22px; color: #192e43; background: white;
+         border: 1px solid #d7e1ea; border-radius: 12px; box-shadow: 0 12px 32px rgba(10, 20, 30, .25); }
+dialog::backdrop { background: rgba(10, 20, 30, .45); }
+dialog h3 { margin: 0 0 8px; font-size: 1.1rem; }
+dialog p { margin: 0; }
+.dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .controls .actions { margin-top: 12px; }
 .exit { display: none; }
 /* Full screen: the picture and its controls take the whole window (the browser's own full screen
@@ -42,25 +56,28 @@ button:disabled { opacity: .45; cursor: not-allowed; }
    Text meets WCAG AA contrast (tested). */
 .viewer.fullscreen { position: fixed; inset: 0; z-index: 1000; margin: 0; padding: 56px 16px 16px;
                      background: #000; grid-template-columns: minmax(0, 1fr) 260px; overflow: auto; }
-.viewer.fullscreen #sky { width: min(100%, calc(100dvh - 72px)); }
+.viewer.fullscreen .sky-frame { width: min(100%, calc(100dvh - 72px)); }
 .viewer.fullscreen .controls { position: static; background: #16191d; color: #e6edf3; border: 1px solid #2c3238;
                                border-radius: 10px; padding: 14px; }
 .viewer.fullscreen .controls output, .viewer.fullscreen .controls .credit { color: #aab6c2; }
 .viewer.fullscreen .controls a:not(.download) { color: #8ab4f8; }
-.viewer.fullscreen .controls .secondary, .viewer.fullscreen .exit {
+.viewer.fullscreen .controls .secondary, .viewer.fullscreen .exit, .viewer.fullscreen dialog .secondary {
   background: #22272e; color: #e6edf3; border-color: #3d444d; }
 .viewer.fullscreen .exit { display: inline-block; position: fixed; top: 10px; right: 16px; z-index: 1001; padding: 7px 14px; }
 .viewer.fullscreen .exit .key { color: #aab6c2; font-size: .85em; }
 .viewer.fullscreen #fullscreen, .viewer.fullscreen .controls .hint { display: none; }  /* redundant here */
+.viewer.fullscreen .reset-row { border-top-color: #2c3238; }
+.viewer.fullscreen dialog { color: #e6edf3; background: #16191d; border-color: #3d444d; }
+.viewer.fullscreen dialog::backdrop { background: rgba(0, 0, 0, .6); }
 body.no-scroll { overflow: hidden; }
 @media (max-aspect-ratio: 1/1) {
   .viewer.fullscreen { grid-template-columns: 1fr; }
-  .viewer.fullscreen #sky { width: min(100%, calc(100dvh - 72px - 330px)); }
+  .viewer.fullscreen .sky-frame { width: min(100%, calc(100dvh - 72px - 330px)); }
 }
 .controls .hint, .controls .credit { margin: 10px 0 0; }
 @media (min-width: 880px) {
   .viewer { grid-template-columns: minmax(0, 1fr) 260px; }
-  #sky { width: min(100%, calc(100svh - 32px)); }
+  .sky-frame { width: min(100%, calc(100svh - 32px)); }
   .controls { position: sticky; top: 16px; }
 }
 /* label + value on one row, slider below. The value has its own fixed-width column (widest:

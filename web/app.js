@@ -34,6 +34,7 @@ const magtype = /** @type {HTMLSelectElement} */ ($("magtype"));
 const hrButton = /** @type {HTMLButtonElement} */ ($("hr-button"));
 const resetButton = /** @type {HTMLButtonElement} */ ($("reset-sliders"));
 const fullscreenButton = /** @type {HTMLButtonElement} */ ($("fullscreen"));
+const resetConfirm = /** @type {HTMLDialogElement} */ ($("reset-confirm"));
 const exitButton = /** @type {HTMLButtonElement} */ ($("exit-fullscreen"));
 const viewer = /** @type {HTMLElement} */ (document.querySelector(".viewer"));
 const hrImage = /** @type {HTMLImageElement} */ ($("hr"));
@@ -473,6 +474,16 @@ function resetSliders() {
   draw();
 }
 
+/** Reset loses the student's tuning, so ask first, in the page's own dialog. Nothing moved: just reset. */
+function askToResetSliders() {
+  const moved = Object.entries(sliders).some(([name, slider]) => name in initialSliders && slider.value !== initialSliders[name]);
+  if (!moved) {
+    resetSliders();
+    return;
+  }
+  resetConfirm.showModal(); // focuses "Keep my settings" (autofocus); Esc keeps them too
+}
+
 let drawQueued = false;
 function queueDraw() {
   if (drawQueued) return;
@@ -711,11 +722,18 @@ form.addEventListener("submit", (event) => {
   void onShowStars();
 });
 for (const slider of Object.values(sliders)) slider.addEventListener("input", queueDraw);
-resetButton.addEventListener("click", resetSliders);
+resetButton.addEventListener("click", askToResetSliders);
+$("reset-ok").addEventListener("click", () => {
+  resetSliders();
+  resetConfirm.close();
+});
+$("reset-cancel").addEventListener("click", () => resetConfirm.close());
+resetConfirm.addEventListener("close", () => resetButton.focus());
 fullscreenButton.addEventListener("click", enterFullscreen);
 exitButton.addEventListener("click", exitFullscreen);
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && inFullscreen()) exitFullscreen();
+  // Esc in the reset question closes the question only.
+  if (event.key === "Escape" && inFullscreen() && !resetConfirm.open) exitFullscreen();
 });
 // Leaving the browser's full screen another way (its own Esc handling, a gesture) leaves ours too.
 document.addEventListener("fullscreenchange", () => {
