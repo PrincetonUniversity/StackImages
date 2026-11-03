@@ -234,30 +234,32 @@ snapshots, and `HOSTING.txt` with these instructions. Copy the folder unchanged 
 any directory of a static web site. All links are relative, so it works from a
 subdirectory such as `/~rvdb/StackImages/`.
 
-The host must send two content types:
+No server settings are needed. Many hosts send `application/octet-stream` for
+extensions they don't know. Browsers refuse that type for JavaScript modules
+(`.mjs`), so the page loads Pyodide differently:
 
-| File | Content type |
-|---|---|
-| `.mjs` | `text/javascript` (`application/javascript` also works) |
-| `.wasm` | `application/wasm` |
-
-Browsers refuse these files when they're sent as `application/octet-stream`, the
-usual default for an unknown extension. Before loading Pyodide, the page checks
-both files and, if either type is wrong, names the file and the type to fix.
+- **The worker is a classic one.** It loads `pyodide.js` with `importScripts`, and
+  every host types `.js` correctly. `pyodide.mjs` isn't shipped.
+- **`.wasm` compiles from its bytes** when it doesn't arrive as `application/wasm`.
+  Pyodide would otherwise stall on it.
+- **The data files are fetched as plain bytes**, so `.whl`, `.npy`, `.csv` and `.json`
+  work with any content type.
 
 `test_site_zip.py` serves the unzipped copy the way vanderbei.princeton.edu does,
 using its headers saved in `tests/web/fixtures/personal_site_headers.json`:
 
 - `nosniff` and its Content-Security-Policy;
-- its content types;
+- the content types from its upload map;
 - `application/octet-stream` for anything unmapped.
 
 Its CSP permits `data:` images but not `blob:` ones, so the HR diagram is shown
 through a `data:` URL.
 
-On that site, `.mjs` and `.wasm` need entries in the upload map
-(`config/azcopy-mime.json` in vanderbei-deploy), and the nginx server it replaces
-needs them too.
+On vanderbei.princeton.edu this holds both on the current nginx VM and on the coming
+Azure Blob storage. The new extensions (`.wasm`, `.whl`, `.npy`) only need the
+vanderbei-deploy step for any new file type: `tools/gen-mime-map.sh` records whatever
+nginx serves for them, so the autosync to Blob and the cutover parity check include
+them.
 
 ## Limits and safeguards
 
@@ -276,7 +278,6 @@ needs them too.
 | "The live Gaia data source is unavailable…" | GAVO is down or slow. Saved copies cover common clusters; otherwise use an ESA file (bottom of the page). |
 | "This field has too many stars for the live data source…" | A wide or Milky-Way-dense field even GAVO's smallest pieces can't answer in time. Lower the FOV or Maximum Magnitude, or use an ESA file. |
 | Page stuck on "Loading Python…" | First visit downloads ~35 MB. On failure, "Reload tool" appears with details. |
-| "This web server sends vendor/pyodide.mjs as …" | A copy hosted elsewhere with the wrong content types; see "Hosting a copy elsewhere". |
 | "The Python worker stopped" | Browser ran out of memory; use a smaller field or magnitude limit. |
 | `pages.yml` warns "No snapshots-* release yet" | Run `snapshots.yml` once (Actions → Snapshots → Run workflow). |
 | `ci.yml` fails in `test_web_equivalence.py` | `ass.py` and the port disagree; see "When Bob sends a new `ass.py`". |
