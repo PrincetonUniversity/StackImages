@@ -779,3 +779,59 @@ def test_uploading_star_data_fills_in_the_field(browser, sites, tmp_path: Path) 
     assert "filled in from the file" in (fresh.text_content("#notes") or "")
     assert fresh.errors == []  # type: ignore[attr-defined]
     fresh.close()
+
+
+CONTRAST = """(selectors) => {
+    const rgb = (text) => text.match(/[\\d.]+/g).map(Number);
+    const lum = ([r, g, b]) => {
+        const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const background = (el) => {  // the first non-transparent background behind an element
+        for (let node = el; node; node = node.parentElement) {
+            const c = rgb(getComputedStyle(node).backgroundColor);
+            if (c.length < 4 || c[3] > 0) return c.slice(0, 3);
+        }
+        return [255, 255, 255];
+    };
+    return selectors.flatMap((selector) => [...document.querySelectorAll(selector)].map((el) => {
+        const [a, b] = [lum(rgb(getComputedStyle(el).color)), lum(background(el))];
+        return [selector, (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)];
+    }));
+}"""
+
+
+def test_full_screen_is_black_with_readable_dark_controls(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    enter_m13(page)
+    page.click("#show-stars")
+    stars_shown(page)
+    page.click("#fullscreen")
+    colors = page.evaluate(
+        """() => ({
+            viewer: getComputedStyle(document.querySelector('.viewer')).backgroundColor,
+            panel: getComputedStyle(document.querySelector('.controls')).backgroundColor,
+        })"""
+    )
+    assert colors["viewer"] == "rgb(0, 0, 0)"  # neutral black around the picture
+    panel = [int(v) for v in colors["panel"].strip("rgb()").split(",")[:3]]
+    assert max(panel) <= 48, colors  # a dark panel, not a bright one beside the stars
+    selectors = [
+        ".controls label",
+        ".controls output",
+        ".controls .credit",
+        ".controls .credit a",
+        "#reset-sliders",
+        "#sky-download",
+        "#data-download",
+        "#exit-fullscreen",
+    ]
+    ratios = page.evaluate(CONTRAST, selectors)
+    assert len(ratios) >= len(selectors)
+    low = [(s, round(r, 2)) for s, r in ratios if r < 4.5]
+    assert low == [], low  # WCAG AA for normal text
+    page.click("#exit-fullscreen")
+    page.wait_for_function("!document.fullscreenElement")
+    normal = page.evaluate("getComputedStyle(document.querySelector('.controls')).backgroundColor")
+    assert normal != colors["panel"]  # the page's normal look is unchanged
+    page.close()
