@@ -61,6 +61,9 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    outputs:
+      fingerprint: ${{ steps.zip.outputs.fingerprint }}
+      snapshots: ${{ steps.snapshots.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-compose-action@v2
@@ -99,6 +102,7 @@ jobs:
             rm -rf build/snapshots && mkdir -p build/snapshots
             tar -xzf build/snapshots.tar.gz -C build/snapshots
             echo "Using $tag"
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
             echo "args=--snapshots build/snapshots" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::No snapshots-* release yet; deploying without the saved-copy fallback."
@@ -107,7 +111,18 @@ jobs:
       - name: Build site
         run: docker-compose run --rm -T web-tools python scripts/build_site.py ${{ steps.snapshots.outputs.args }}
       - name: Zip the site for hosting elsewhere (served as StackImages-web.zip)
-        run: docker-compose run --rm -T web-tools python scripts/zip_site.py
+        id: zip
+        run: |
+          docker-compose run --rm -T web-tools python scripts/zip_site.py
+          fingerprint=$(docker-compose run --rm -T web-tools python scripts/zip_site.py --fingerprint _site/StackImages-web.zip)
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        if: github.event_name != 'pull_request'
+        with:
+          name: site-zip
+          path: _site/StackImages-web.zip
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/configure-pages@v6
         if: github.event_name != 'pull_request'
       - uses: actions/upload-pages-artifact@v5
@@ -128,3 +143,50 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v5
+
+  # The zip also as a release (web-YYYYMMDD-HHMM, never marked Latest, so the desktop
+  # download stays Latest). Made only when the site's contents changed: the fingerprint
+  # leaves out the build time, so a redeploy of the same site makes no release.
+  release:
+    needs: [build, deploy]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      FINGERPRINT: ${{ needs.build.outputs.fingerprint }}
+      SNAPSHOTS: ${{ needs.build.outputs.snapshots }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: site-zip
+      - name: Publish a web-* release if the site changed
+        run: |
+          set -euo pipefail
+          [[ "$FINGERPRINT" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::bad fingerprint '$FINGERPRINT'"; exit 1; }
+          last=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
+                   --jq '[.[].tagName | select(startswith("web-"))] | sort | last // ""')
+          if [ -n "$last" ]; then
+            body=$(gh release view "$last" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
+            if grep -qF "Site fingerprint: $FINGERPRINT" <<< "$body"; then
+              echo "The site is unchanged since $last; no new release."
+              exit 0
+            fi
+          fi
+          tag="web-$(date -u +%Y%m%d-%H%M)"
+          cat > notes.md <<EOF
+          Show Clusters as one zip, for hosting a copy on another web site. Unzip it and upload the
+          \`StackImages\` folder unchanged; no server settings are needed (see HOSTING.txt inside).
+
+          The current version is always at https://princetonuniversity.github.io/StackImages/StackImages-web.zip
+
+          Built from $GITHUB_SHA with saved snapshots ${SNAPSHOTS:-none}.
+
+          Site fingerprint: $FINGERPRINT
+          EOF
+          gh release create "$tag" StackImages-web.zip --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --latest=false \
+            --title "Show Clusters web copy $tag" --notes-file notes.md
+          echo "Published $tag"

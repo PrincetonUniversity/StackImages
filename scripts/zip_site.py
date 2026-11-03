@@ -7,11 +7,16 @@ gives the same bytes.
 
 Usage:
   .venv/bin/python scripts/zip_site.py [--site _site] [--out _site/StackImages-web.zip] [--dry-run]
+  .venv/bin/python scripts/zip_site.py --fingerprint _site/StackImages-web.zip
+
+--fingerprint prints a hash of the zip's contents, leaving out the build time recorded in
+manifest.json; pages.yml publishes a web-* release only when it changes.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 import zipfile
 from pathlib import Path
@@ -22,6 +27,8 @@ NAME = "StackImages-web.zip"
 SKIP = {".nojekyll", NAME}  # GitHub Pages only; the zip never contains itself
 STORED = {".whl", ".zip", ".gz"}  # already compressed
 TIMESTAMP = (1980, 1, 1, 0, 0, 0)  # fixed, so rebuilding an unchanged site gives the same zip
+BUILD_RECORD = f"{FOLDER}/ShowClusters/manifest.json"  # holds the build time; its file list is
+# made of hashes of the other files, so leaving it out loses nothing
 
 HOSTING = """\
 Show Clusters (StackImages): a copy to put on your own web site
@@ -73,12 +80,26 @@ def write_zip(site: Path, out: Path) -> int:
     return len(files) + 1
 
 
+def fingerprint(archive: Path) -> str:
+    """Hash of every file in the zip (names and contents) except the build record."""
+    digest = hashlib.sha256()
+    with zipfile.ZipFile(archive) as z:
+        for name in sorted(z.namelist()):
+            if name != BUILD_RECORD:
+                digest.update(f"{name}\0{hashlib.sha256(z.read(name)).hexdigest()}\n".encode())
+    return digest.hexdigest()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--site", type=Path, default=ROOT / "_site")
     parser.add_argument("--out", type=Path, help=f"default: <site>/{NAME}")
     parser.add_argument("--dry-run", action="store_true", help="list what would be packed")
+    parser.add_argument("--fingerprint", type=Path, metavar="ZIP", help="print a zip's content hash")
     args = parser.parse_args(argv)
+    if args.fingerprint:
+        print(fingerprint(args.fingerprint))
+        return 0
     out: Path = args.out or args.site / NAME
     if args.dry_run:
         files = site_files(args.site)

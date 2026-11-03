@@ -8,6 +8,7 @@ import functools
 import http.server
 import json
 import os
+import shutil
 import socketserver
 import sys
 import threading
@@ -65,6 +66,30 @@ def test_zip_is_reproducible(site: Path, archive: Path, tmp_path: Path) -> None:
     zip_site.write_zip(site, again)
     assert again.read_bytes() == archive.read_bytes()
     assert not list(tmp_path.glob("*.partial"))
+
+
+def test_fingerprint_ignores_only_the_build_time(site: Path, archive: Path, tmp_path: Path) -> None:
+    """A redeploy of the same site must not make a new release; any real change must."""
+    copy = tmp_path / "site"
+    shutil.copytree(site, copy)
+    manifest = copy / "ShowClusters" / "manifest.json"
+    record = json.loads(manifest.read_text())
+    record["built"] = "2099-01-01T00:00:00+00:00"
+    manifest.write_text(json.dumps(record, indent=1) + "\n")
+    rebuilt = tmp_path / "rebuilt.zip"
+    zip_site.write_zip(copy, rebuilt)
+    assert rebuilt.read_bytes() != archive.read_bytes()
+    assert zip_site.fingerprint(rebuilt) == zip_site.fingerprint(archive)
+
+    (copy / "ShowClusters" / "app.js").write_text("// changed\n")
+    zip_site.write_zip(copy, rebuilt)
+    assert zip_site.fingerprint(rebuilt) != zip_site.fingerprint(archive)
+
+
+def test_fingerprint_command(archive: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert zip_site.main(["--fingerprint", str(archive)]) == 0
+    assert capsys.readouterr().out.strip() == zip_site.fingerprint(archive)
+    assert len(zip_site.fingerprint(archive)) == 64
 
 
 def test_pages_use_only_relative_links(site: Path) -> None:
