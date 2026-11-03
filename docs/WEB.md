@@ -135,6 +135,7 @@ checks that the pieces cover the field (including near the poles and across RA 0
   reproduces the same count, picture and HR points (tested), so a student can submit the exact
   data behind a diagram, or redo the work offline.
 - **Picture settings travel with the data.** The star-data file records the sliders' exact positions (`# Display sliders: colsat=…; gamma=…; mini=…; maxi=… (shown as …)`). Uploading it again sets the sliders back, so the picture matches pixel for pixel (tested); Reset still returns to the standard starting positions. Malformed or edited lines are ignored.
+- **The field travels with the data.** All four downloads record the five form inputs under the form's own labels (`Field: Object Catalog Name=M13; Right Ascension (RA)=…; Declination (Dec)=…; Field of View (FOV)=0.2; Maximum Magnitude=16`; separate text fields in the PNGs). Uploading a star-data file fills in the form from it, so the file is shown as saved whatever the form held (e.g. a grader who has typed nothing). Invalid records are ignored.
 - **Provenance and credit in the file.** Both CSVs start with `#` comment lines: the field, the
   data source and date, and the credits below. The upload reader skips `#` lines.
 - **`drawn`** comes from the diagram's own point sizes, so the drawn rows are exactly the diagram's
