@@ -588,3 +588,74 @@ def test_fov_shows_arcminutes(browser, sites, fov: str, shown: str) -> None:  # 
     page.fill("#fov", fov)  # fires input events as the student types
     assert page.text_content("#fov-unit") == shown
     page.close()
+
+
+def viewer_state(page) -> dict:  # type: ignore[no-untyped-def]
+    return page.evaluate(
+        """() => {
+            const box = (id) => document.getElementById(id).getBoundingClientRect();
+            const viewer = document.querySelector('.viewer').getBoundingClientRect();
+            const ids = ['sky', 'colsat', 'gamma', 'mini', 'maxi', 'reset-sliders', 'exit-fullscreen'];
+            const parts = ids.map(box);
+            const onScreen = (b) =>
+                b.top >= 0 && b.left >= 0 && b.bottom <= innerHeight && b.right <= innerWidth;
+            return {
+                viewer: [viewer.left, viewer.top, viewer.width, viewer.height],
+                sky: box('sky').width,
+                inside: parts.every(onScreen),
+                exitShown: !document.getElementById('exit-fullscreen').hidden,
+                pressed: document.getElementById('fullscreen').getAttribute('aria-pressed'),
+                focus: document.activeElement.id,
+                bodyOverflow: getComputedStyle(document.body).overflow,
+            };
+        }"""
+    )
+
+
+@pytest.mark.parametrize(("width", "height"), [(1280, 800), (390, 844)])
+def test_full_screen_picture_and_back(browser, sites, width: int, height: int) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    page.set_viewport_size({"width": width, "height": height})
+    enter_m13(page)
+    page.click("#show-stars")
+    stars_shown(page)
+    normal = viewer_state(page)
+    assert not normal["exitShown"] and normal["pressed"] == "false"
+
+    page.get_by_role("button", name="Full screen").click()
+    full = viewer_state(page)
+    assert full["viewer"] == pytest.approx([0, 0, width, height], abs=1)  # covers the whole window
+    assert full["inside"], full  # picture, every slider, Reset and Exit all on screen
+    assert full["sky"] > normal["sky"] * 1.05, (normal["sky"], full["sky"])  # a bigger picture
+    assert full["exitShown"] and full["focus"] == "exit-fullscreen" and full["pressed"] == "true"
+    assert full["bodyOverflow"] == "hidden"  # the page behind does not scroll
+
+    before = page.evaluate("document.getElementById('sky').toDataURL()")
+    page.evaluate(
+        "const s = document.getElementById('gamma'); s.value = s.max; s.dispatchEvent(new Event('input'));"
+    )
+    page.wait_for_timeout(100)
+    assert (
+        page.evaluate("document.getElementById('sky').toDataURL()") != before
+    )  # sliders work in full screen
+
+    page.get_by_role("button", name="Exit full screen").click()
+    page.wait_for_function("!document.fullscreenElement")  # the browser leaves its full screen
+    back = viewer_state(page)
+    assert back["sky"] == pytest.approx(normal["sky"], abs=1) and not back["exitShown"]
+    assert back["focus"] == "fullscreen" and back["pressed"] == "false" and back["bodyOverflow"] != "hidden"
+    assert page.errors == []  # type: ignore[attr-defined]
+    page.close()
+
+
+def test_escape_leaves_full_screen(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    enter_m13(page)
+    page.click("#show-stars")
+    stars_shown(page)
+    page.click("#fullscreen")
+    assert viewer_state(page)["exitShown"]
+    page.keyboard.press("Escape")
+    state = viewer_state(page)
+    assert not state["exitShown"] and state["pressed"] == "false" and state["focus"] == "fullscreen"
+    page.close()

@@ -76,7 +76,8 @@
         <dt>Data</dt><dd id="source"></dd>
       </dl>
       <ul id="notes" class="notes"></ul>
-      <div class="viewer">
+      <div class="viewer" role="region" aria-label="Star field and picture controls">
+        <button id="exit-fullscreen" type="button" class="exit" aria-label="Exit full screen" hidden>✕ Exit full screen <span class="key">(Esc)</span></button>
         <canvas id="sky" width="1200" height="1200" aria-label="Simulated view of the stars in the field"></canvas>
         <div class="controls">
           <div class="sliders">
@@ -95,6 +96,7 @@
           </div>
           <div class="actions">
             <button id="reset-sliders" type="button" class="secondary small" disabled>Reset sliders</button>
+            <button id="fullscreen" type="button" class="secondary small" aria-pressed="false" disabled>Full screen</button>
           </div>
           <div class="actions">
             <a id="sky-download" class="download secondary" href="#">Download picture (PNG)</a>
