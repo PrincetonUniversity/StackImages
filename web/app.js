@@ -515,6 +515,17 @@ async function downloadCsv(action, args, what) {
   }
 }
 
+// ---- FOV in arcminutes ------------------------------------------------------------------
+
+/** Show the field of view in arcminutes beside its degrees, e.g. "degrees (18 arcminutes)". */
+function showFovArcminutes() {
+  const degrees = Number(fovInput.value);
+  const arcminutes = Math.round(degrees * 60 * 100) / 100; // at most two decimals, no float noise
+  $("fov-unit").textContent = fovInput.value.trim() !== "" && Number.isFinite(degrees) && degrees > 0
+    ? `degrees (${arcminutes.toLocaleString("en-US", { maximumFractionDigits: 2 })} arcminutes)`
+    : "degrees";
+}
+
 // ---- Wiring --------------------------------------------------------------------------
 
 objectInput.addEventListener("keydown", (event) => {
@@ -533,6 +544,7 @@ for (const input of [raInput, decInput]) {
   });
 }
 for (const input of [fovInput, maxmagInput]) input.addEventListener("change", () => void preview());
+fovInput.addEventListener("input", showFovArcminutes);
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   void onShowStars();
@@ -581,4 +593,5 @@ retry.addEventListener("click", () => {
 });
 
 startWorker();
+showFovArcminutes();
 refresh();
