@@ -126,21 +126,21 @@ def gaia_adql(ra_hours: float, dec_deg: float, fov: float, maxmag: float, servic
 
 def circle_adql(ra_deg: float, dec_deg: float, radius: float, maxmag: float, service: str) -> str:
     """Stars brighter than maxmag within `radius` degrees of (ra_deg, dec_deg)."""
-    where = (
-        f"WHERE DISTANCE({ra_deg:14f}, {dec_deg:14f}, gaia.ra, gaia.dec) < {radius:14f} "
-        f"AND gaia.phot_g_mean_mag < {maxmag:5f} "
-    )
+    circle = f"WHERE DISTANCE({ra_deg:14f}, {dec_deg:14f}, gaia.ra, gaia.dec) < {radius:14f} "
     if service == "esa":
         return (
             "SELECT  gaia.ra, gaia.dec, gaia.parallax, gaia.phot_g_mean_mag, gaia.bp_rp, gaia.pmra, "
             "gaia.pmdec, gaia.phot_g_mean_flux, gaia.phot_rp_mean_flux, gaia.phot_bp_mean_flux "
-            "FROM gaiadr3.gaia_source AS gaia " + where
+            "FROM gaiadr3.gaia_source AS gaia " + circle + f"AND gaia.phot_g_mean_mag < {maxmag:5f} "
         )
     if service == "gavo":
+        # "+ 0" selects the same stars but keeps GAVO's database off its magnitude index:
+        # in dense Milky Way fields (M23, M22) it otherwise scans every bright star in the
+        # sky and hits the 20 s limit, where the position index answers in seconds.
         return (
             "SELECT gaia.ra, gaia.dec, gaia.parallax, gaia.phot_g_mean_mag, "
             "gaia.phot_bp_mean_mag, gaia.phot_rp_mean_mag, gaia.pmra, gaia.pmdec "
-            "FROM gaia.dr3lite AS gaia " + where
+            "FROM gaia.dr3lite AS gaia " + circle + f"AND gaia.phot_g_mean_mag + 0 < {maxmag:5f} "
         )
     raise ValueError(f"unknown service {service!r}")
 

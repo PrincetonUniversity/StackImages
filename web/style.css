@@ -23,6 +23,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .secondary { background: white; color: #174f77; }
 :focus-visible { outline: 3px solid #e7a840; outline-offset: 3px; }
 #error { color: #9a2323; font-weight: 600; }
+#progress { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem; margin: -0.25rem 0 0.75rem; }
+#progress-bar { width: min(100%, 16rem); height: 0.75rem; accent-color: #2b5797; }
+#progress-text { color: #4a5560; font-size: 0.9rem; }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0 0 12px; }
 .facts dt { font-weight: 600; }
 .facts dd { margin: 0; font-variant-numeric: tabular-nums; }

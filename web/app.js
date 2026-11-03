@@ -26,6 +26,9 @@ const maxmagInput = /** @type {HTMLInputElement} */ ($("maxmag"));
 const showButton = /** @type {HTMLButtonElement} */ ($("show-stars"));
 const status = $("status");
 const errorBox = $("error");
+const progress = $("progress");
+const progressBar = /** @type {HTMLProgressElement} */ ($("progress-bar"));
+const progressText = $("progress-text");
 const retry = $("retry");
 const starsContent = $("stars-content");
 const starsEmpty = $("stars-empty");
@@ -216,35 +219,86 @@ class TooDenseError extends Error {}
 /**
  * Fetch a field as one or more pieces (large fields are split so each answers quickly);
  * a piece that times out is split again. Returns one result per piece.
+ * While it runs, a progress bar and a clock show it's working, so nobody gives up on a
+ * crowded field that takes a minute; only the status line is read out by screen readers.
  * @param {{query: string, radius: number}[]} tiles
  */
 async function fetchGavoTiles(tiles) {
-  const queue = [...tiles];
   /** @type {Uint8Array<ArrayBuffer>[]} */
   const parts = [];
   let total = tiles.length;
-  const deadline = Date.now() + GAVO_TOTAL_MS;
-  const report = () => setStatus(total > 1
-    ? `Downloading star data from Gaia (via GAVO)… ${parts.length} of ${total} parts`
-    : "Downloading star data from Gaia (via GAVO)…");
-  report();
-  const fetchNext = async () => {
-    while (queue.length) {
-      if (Date.now() > deadline) throw new GavoError("the field took too long to download", true);
-      const tile = /** @type {{query: string, radius: number}} */ (queue.shift());
-      try {
-        parts.push(await fetchGavo(tile.query));
-      } catch (error) {
-        if (!(error instanceof GavoError && error.timedOut)) throw error;
-        const smaller = /** @type {{query: string, radius: number}[]} */ (await call("split", { tile }));
-        if (!smaller.length) throw new TooDenseError("dense field");
-        queue.push(...smaller);
-        total += smaller.length - 1;
-      }
-      report();
+  let split = false;
+  const started = Date.now();
+  const deadline = started + GAVO_TOTAL_MS;
+  const report = () => {
+    const done = total > 1 ? ` ${parts.length} of ${total} parts` : "";
+    const why = split ? " Some parts were too crowded to fetch at once, so they come as smaller pieces." : "";
+    setStatus(`Downloading star data from Gaia (via GAVO)…${done}${why}`);
+    if (total > 1) {
+      progressBar.max = total;
+      progressBar.value = parts.length;
+    } else {
+      progressBar.removeAttribute("value"); // indeterminate: one piece, no fraction to show
     }
   };
-  await Promise.all(Array.from({ length: GAVO_PARALLEL }, fetchNext));
+  const tick = () => {
+    const seconds = Math.floor((Date.now() - started) / 1000);
+    progressText.textContent =
+      `${seconds} s so far. Please keep this tab open; crowded parts of the Milky Way can take a minute or two.`;
+  };
+  report();
+  tick();
+  progress.hidden = false;
+  const clock = setInterval(tick, 1000);
+  // At most GAVO_PARALLEL requests at a time, for every piece including those made by
+  // splitting. (A fixed set of workers that stop when the queue is empty would leave the
+  // pieces of a split to whichever worker was still running, one after another.)
+  let active = 0;
+  let failed = false;
+  /** @type {(() => void)[]} */
+  const waiting = [];
+  const acquire = async () => {
+    while (active >= GAVO_PARALLEL) await new Promise((resolve) => waiting.push(() => resolve(undefined)));
+    active += 1;
+  };
+  const release = () => {
+    active -= 1;
+    waiting.shift()?.();
+  };
+  /** @param {{query: string, radius: number}} tile @returns {Promise<void>} */
+  const fetchTile = async (tile) => {
+    await acquire();
+    /** @type {{query: string, radius: number}[]} */
+    let smaller;
+    try {
+      if (failed) return;
+      if (Date.now() > deadline) throw new GavoError("the field took too long to download", true);
+      try {
+        parts.push(await fetchGavo(tile.query));
+        report();
+        return;
+      } catch (error) {
+        if (!(error instanceof GavoError && error.timedOut)) throw error;
+      }
+      smaller = /** @type {{query: string, radius: number}[]} */ (await call("split", { tile }));
+      if (!smaller.length) throw new TooDenseError("dense field");
+      total += smaller.length - 1;
+      split = true;
+      report();
+    } catch (error) {
+      failed = true; // the others stop at their next turn
+      throw error;
+    } finally {
+      release();
+    }
+    await Promise.all(smaller.map(fetchTile));
+  };
+  try {
+    await Promise.all(tiles.map(fetchTile));
+  } finally {
+    clearInterval(clock);
+    progress.hidden = true;
+  }
   return parts;
 }
 

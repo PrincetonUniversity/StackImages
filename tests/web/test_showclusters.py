@@ -103,7 +103,10 @@ def test_adql_for_both_services() -> None:
     assert "FROM gaia.dr3lite AS gaia" in gavo and "phot_bp_mean_mag" in gavo
     for query in (esa, gavo):
         assert "250.425000" in query and "36.460833" in query and "0.141421" in query
-        assert "phot_g_mean_mag < 16.000000" in query
+    assert "AND gaia.phot_g_mean_mag < 16.000000" in esa  # exactly as ass.py sends it
+    # "+ 0" keeps GAVO's database off its magnitude index, which in dense fields makes it
+    # scan the whole sky and time out (M23: 20 s timeout before, 14.5 s answer after).
+    assert "AND gaia.phot_g_mean_mag + 0 < 16.000000" in gavo
     with pytest.raises(ValueError):
         sc.gaia_adql(RA, DEC, 0.2, 16, "other")
 

@@ -194,6 +194,77 @@ def test_homework_flow_with_live_gavo(browser, sites) -> None:  # type: ignore[n
     page.close()
 
 
+def fulfill_gavo(route) -> None:  # type: ignore[no-untyped-def]
+    route.fulfill(
+        status=200,
+        body=(FIXTURES / "m13_gavo.csv").read_bytes(),
+        headers={"content-type": "text/csv", "access-control-allow-origin": "*"},
+    )
+
+
+def test_progress_while_gavo_is_slow(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    """A slow answer shows a running clock and asks the student to wait, then clears."""
+    held: list = []  # requests answered only when the test says so
+    page = open_page(browser, sites["without"], lambda route: held.append(route))
+    enter_m13(page)
+    page.click("#show-stars")
+    page.wait_for_function(
+        "document.getElementById('progress-text').textContent.startsWith('2 s so far')", timeout=10_000
+    )
+    assert page.is_visible("#progress")
+    assert "keep this tab open" in page.text_content("#progress-text")
+    assert page.get_attribute("#progress-text", "aria-hidden") == "true"  # not read out every second
+    assert page.text_content("#status") == "Downloading star data from Gaia (via GAVO)…"
+    assert len(held) == 1
+    fulfill_gavo(held.pop())
+    page.wait_for_function("!document.getElementById('stars-content').hidden", timeout=60_000)
+    assert page.is_hidden("#progress")
+    assert page.text_content("#count") == "1,369"
+    page.close()
+
+
+def test_progress_counts_pieces_after_a_split(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    from fakegaia import TIMEOUT_BODY
+
+    held: list = []
+
+    def gavo(route) -> None:  # type: ignore[no-untyped-def]
+        if not held and not getattr(gavo, "timed_out", False):
+            gavo.timed_out = True  # type: ignore[attr-defined]
+            route.fulfill(
+                status=500,
+                body=TIMEOUT_BODY,
+                headers={"content-type": "text/xml", "access-control-allow-origin": "*"},
+            )
+            return
+        held.append(route)
+
+    page = open_page(browser, sites["without"], gavo)
+    enter_m13(page)
+    page.click("#show-stars")
+    page.wait_for_function(
+        "document.getElementById('status').textContent.includes('0 of 4 parts')", timeout=20_000
+    )
+    assert "too crowded to fetch at once" in page.text_content("#status")
+    page.wait_for_function("document.getElementById('progress-bar').max === 4")
+    for _ in range(100):  # the four pieces are requested together, not one after another
+        if len(held) == 4:
+            break
+        page.wait_for_timeout(100)
+    assert len(held) == 4, f"{len(held)} of the 4 pieces requested at once"
+    fulfill_gavo(held.pop(0))
+    page.wait_for_function(
+        "document.getElementById('status').textContent.includes('1 of 4 parts')", timeout=20_000
+    )
+    assert page.evaluate("document.getElementById('progress-bar').value") == 1
+    for route in held:
+        fulfill_gavo(route)
+    page.wait_for_function("!document.getElementById('stars-content').hidden", timeout=60_000)
+    assert page.text_content("#count") == "1,369"  # the same stars as one query
+    assert page.is_hidden("#progress")
+    page.close()
+
+
 def test_show_stars_resets_magnitude_type(browser, sites) -> None:  # type: ignore[no-untyped-def]
     page = open_page(browser, sites["without"], gavo_ok([]))
     enter_m13(page)

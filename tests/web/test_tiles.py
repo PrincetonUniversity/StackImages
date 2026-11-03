@@ -182,6 +182,16 @@ def test_pieces_give_exactly_the_one_query_result(
     assert split["png"] == whole["png"]  # the downloaded HR diagram, byte for byte
 
 
+def test_dense_field_is_one_quick_query(session: sc.Session) -> None:
+    """A service that times out on a bare magnitude condition (GAVO in M23's field) must
+    still answer the page's query at once, without splitting."""
+    fake = FakeGaia(slow_magnitude_index=True)
+    parts = fetch_like_the_page(session, fake)
+    assert len(parts) == 1 and len(fake.queries) == 1
+    whole = run(session, fetch_like_the_page(session, FakeGaia()))
+    assert run(session, parts)["result"]["count"] == whole["result"]["count"] > 1000
+
+
 @pytest.mark.parametrize("uploaded", [True, False])
 def test_outside_note_only_for_uploaded_files(session: sc.Session, uploaded: bool) -> None:
     data = (Path(__file__).parent / "fixtures" / "m13_esa.csv").read_bytes()
