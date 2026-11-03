@@ -64,9 +64,11 @@ jobs:
           fingerprint=$(scripts/package_pywin.sh --fingerprint)
           gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --slurp > releases.json
           tag=$(python3 scripts/next_release.py --app-version "$app" --fingerprint "$fingerprint" --releases releases.json)
-          echo "app=$app" >> "$GITHUB_OUTPUT"
-          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          {
+            echo "app=$app"
+            echo "fingerprint=$fingerprint"
+            echo "tag=$tag"
+          } >> "$GITHUB_OUTPUT"
           if [ -z "$tag" ]; then
             echo "::notice::PyWin.tar's app and data files are unchanged since the last release; no new release."
           else
