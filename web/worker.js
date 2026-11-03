@@ -66,6 +66,8 @@ context.onmessage = (/** @type {MessageEvent} */ { data }) => {
       result = toJs(session.lookup(args.name));
     } else if (action === "plan") {
       result = toJs(session.plan(args.ra, args.dec, args.fov, args.maxmag));
+    } else if (action === "split") {
+      result = toJs(session.split(args.tile));
     } else if (action === "showStars") {
       const py = session.show_stars(
         args.bytes, args.filename, args.source, args.ra, args.dec, args.fov, args.maxmag,

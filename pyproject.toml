@@ -12,7 +12,7 @@ src = [".", "web", "scripts"]  # same import grouping on every machine
 select = ["E", "F", "W", "I", "B", "UP", "N"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["showclusters", "build_site", "build_snapshots", "vendor_pyodide", "ass"]
+known-first-party = ["showclusters", "build_site", "build_snapshots", "vendor_pyodide", "next_release", "fakegaia", "ass"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/desktop/test_gui_titles.py" = ["UP031", "UP022"]  # pre-existing test, unchanged style
