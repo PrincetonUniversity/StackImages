@@ -44,6 +44,10 @@
         </div>
       </form>
       <p id="status" role="status" aria-live="polite">Loading Python and the star catalogs… The first visit downloads about 40 MB.</p>
+      <div id="progress" hidden>
+        <progress id="progress-bar" aria-label="Star data download"></progress>
+        <span id="progress-text" aria-hidden="true"></span>
+      </div>
       <p id="error" role="alert" hidden></p>
       <details id="load-details" hidden><summary>Loading details</summary><pre id="load-error"></pre></details>
       <button id="retry" class="secondary" type="button" hidden>Reload tool</button>
