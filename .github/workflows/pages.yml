@@ -1,8 +1,9 @@
 name: Pages (web)
 
-# The Show Clusters web page. Independent of ci.yml (desktop): each has its own path
-# filters and neither waits for the other. Checks and builds run in the pinned
-# containers from compose.yaml (web-tools, lint-js).
+# The StackImages web pages (home, Show Clusters, HR Diagram of Your Own Image).
+# Independent of ci.yml (desktop): each has its own path filters and neither waits for
+# the other. Changes to Markdown files alone (README.md, docs/) start neither workflow.
+# Checks and builds run in the pinned containers from compose.yaml (web-tools, lint-js).
 on:
   push:
     branches: [main]
@@ -27,6 +28,7 @@ on:
       - "compose.yaml"
       - "ci/web-tools.Dockerfile"
       - ".github/workflows/pages.yml"
+      - "!**.md"  # documentation only: nothing to test or deploy
   pull_request:
     branches: [main]
     paths:
@@ -50,6 +52,7 @@ on:
       - "compose.yaml"
       - "ci/web-tools.Dockerfile"
       - ".github/workflows/pages.yml"
+      - "!**.md"  # documentation only: nothing to test or deploy
   workflow_dispatch:  # also started by snapshots.yml after publishing new snapshots
 
 permissions:

@@ -212,5 +212,6 @@ Notes
   README/LICENSE edits alone don't trigger one. Run CI (desktop) manually on `main` to release on demand.
 - Maintainers: run the desktop tests locally with `docker-compose run --rm desktop-tests`.
   `environment.yml` and `ci/conda-linux-64.lock` define the CI environment; regenerate the lock with `scripts/lock_conda_env.sh`.
-- CI: `ci.yml` (desktop app, `PyWin.tar`), `pages.yml` (web page) and `snapshots.yml` (web fallback data) are
-  independent workflows; see [docs/WEB.md](docs/WEB.md#workflows).
+- CI: `ci.yml` (desktop app, `PyWin.tar`), `pages.yml` (web pages, with the `web-*` and `hrdiagram-*` releases)
+  and `snapshots.yml` (web fallback data) are independent workflows; see [docs/WEB.md](docs/WEB.md#workflows).
+  Changes to Markdown files alone (this README, `docs/`) start no workflow.
