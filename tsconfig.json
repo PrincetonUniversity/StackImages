@@ -10,5 +10,5 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true
   },
-  "include": ["web/app.js", "web/worker.js", "web/stretch.js", "web/hrdiagram/app.js", "web/hrdiagram/worker.js"]
+  "include": ["web/app.js", "web/worker.js", "web/stretch.js", "web/viewer.js", "web/hrdiagram/app.js", "web/hrdiagram/worker.js"]
 }

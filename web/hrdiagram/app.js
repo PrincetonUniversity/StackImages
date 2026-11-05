@@ -3,7 +3,8 @@
 // image and does the science; this file handles the file, the picture sliders, the two
 // diagrams and the downloads. The steps follow the StackImages desktop window.
 
-import { sliderValues, stretchImage } from "../stretch.js"; // the site build puts it beside this file
+import { sliderValues, stretchImage } from "../stretch.js"; // the site build puts these beside this file
+import { setUpViewer } from "../viewer.js";
 
 const MAX_FILE_BYTES = 250 * 1024 * 1024; // keep in step with hrimage.MAX_FILE_BYTES
 
@@ -26,6 +27,7 @@ const faintestInput = /** @type {HTMLInputElement} */ ($("faintest"));
 const hrButton = /** @type {HTMLButtonElement} */ ($("hr-button"));
 const colorButton = /** @type {HTMLButtonElement} */ ($("color-button"));
 const resetButton = /** @type {HTMLButtonElement} */ ($("reset-sliders"));
+const fullscreenButton = /** @type {HTMLButtonElement} */ ($("fullscreen"));
 const diagram = /** @type {HTMLImageElement} */ ($("diagram"));
 const diagramSummary = $("diagram-summary");
 const diagramDownloads = $("diagram-downloads");
@@ -123,6 +125,7 @@ function refresh() {
   fileInput.disabled = !ready || busy;
   hrButton.disabled = colorButton.disabled = !ready || busy || !image;
   resetButton.disabled = busy || !image;
+  fullscreenButton.disabled = !image;
 }
 
 /** @param {unknown} error @param {string} fallback */
@@ -167,6 +170,7 @@ let image = null;
 let initialSliders = {};
 
 function showPictureEmpty() {
+  exitFullscreen(); // a new or failed file never leaves the old picture full screen
   $("picture-content").hidden = true;
   $("picture-empty").hidden = false;
   clearDiagram();
@@ -379,7 +383,7 @@ async function downloadPoints(event) {
 
 fileInput.addEventListener("change", () => void onFile());
 for (const slider of Object.values(sliders)) slider.addEventListener("input", queueDraw);
-resetButton.addEventListener("click", resetSliders);
+const { exitFullscreen } = setUpViewer({ sliders, initial: () => initialSliders, reset: resetSliders, hasPicture: () => Boolean(image) });
 pictureDownload.addEventListener("click", downloadPicture);
 hrButton.addEventListener("click", () => void onDiagram("hrDiagram"));
 colorButton.addEventListener("click", () => void onDiagram("colorDiagram"));

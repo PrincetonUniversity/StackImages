@@ -29,14 +29,14 @@ sys.path.insert(0, str(ROOT / "web"))
 
 import showclusters as sc  # noqa: E402
 
-WEB_FILES = ("index.html", "app.js", "stretch.js", "worker.js", "style.css", "showclusters.py")
+WEB_FILES = ("index.html", "app.js", "stretch.js", "viewer.js", "worker.js", "style.css", "showclusters.py")
 CATALOGS = ("NI2021_MessierObjects.csv", "NI2021_NGCObjects.csv", "ICObj.csv")
 APP_PATH = "ShowClusters"  # served at https://princetonuniversity.github.io/StackImages/ShowClusters/
 # HR Diagram of Your Own Image, at .../StackImages/HRDiagram/. It uses ShowClusters' Pyodide
 # (../ShowClusters/vendor/) rather than a second copy.
 HR_PATH = "HRDiagram"
 HR_PAGE_FILES = ("index.html", "app.js", "worker.js")  # from web/hrdiagram/
-HR_SHARED_FILES = ("stretch.js", "style.css", "showclusters.py", "hrimage.py")  # from web/
+HR_SHARED_FILES = ("stretch.js", "viewer.js", "style.css", "showclusters.py", "hrimage.py")  # from web/
 # The site root is a StackImages home page (web/home.html) linking to the app.
 
 
@@ -100,8 +100,9 @@ def build(site: Path, vendor: Path, snapshots: Path | None) -> None:
     app = (out / "app.js").read_text()
     worker_version = digest(out / "worker.js")[:12]
     app = app.replace('new URL("worker.js"', f'new URL("worker.js?v={worker_version}"')
-    stretch = f'"./stretch.js?v={digest(out / "stretch.js")[:12]}"'
-    (out / "app.js").write_text(app.replace('"./stretch.js"', stretch))
+    for module in ("stretch.js", "viewer.js"):
+        app = app.replace(f'"./{module}"', f'"./{module}?v={digest(out / module)[:12]}"')
+    (out / "app.js").write_text(app)
     build_hr_page(site / HR_PATH)
     (site / ".nojekyll").write_text("")
     shutil.copy2(ROOT / "web" / "style.css", site / "style.css")
@@ -138,8 +139,9 @@ def build_hr_page(out: Path) -> None:
     (out / "index.html").write_text(page)
     app = (out / "app.js").read_text()
     app = app.replace('new URL("worker.js"', f'new URL("worker.js?v={digest(out / "worker.js")[:12]}"')
-    stretch = f'"./stretch.js?v={digest(out / "stretch.js")[:12]}"'
-    (out / "app.js").write_text(app.replace('"../stretch.js"', stretch))
+    for module in ("stretch.js", "viewer.js"):
+        app = app.replace(f'"../{module}"', f'"./{module}?v={digest(out / module)[:12]}"')
+    (out / "app.js").write_text(app)
 
 
 def main(argv: list[str] | None = None) -> int:

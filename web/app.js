@@ -3,6 +3,7 @@
 // the form, the Gaia requests, the picture sliders and downloads.
 
 import { sliderValues, stretchImage } from "./stretch.js";
+import { setUpViewer } from "./viewer.js";
 
 const GAVO_TAP = "https://dc.g-vo.org/tap/sync";
 const MAX_ROWS = 300000; // keep in step with showclusters.MAX_ROWS
@@ -39,9 +40,6 @@ const magtype = /** @type {HTMLSelectElement} */ ($("magtype"));
 const hrButton = /** @type {HTMLButtonElement} */ ($("hr-button"));
 const resetButton = /** @type {HTMLButtonElement} */ ($("reset-sliders"));
 const fullscreenButton = /** @type {HTMLButtonElement} */ ($("fullscreen"));
-const resetConfirm = /** @type {HTMLDialogElement} */ ($("reset-confirm"));
-const exitButton = /** @type {HTMLButtonElement} */ ($("exit-fullscreen"));
-const viewer = /** @type {HTMLElement} */ (document.querySelector(".viewer"));
 const hrImage = /** @type {HTMLImageElement} */ ($("hr"));
 const hrDownload = /** @type {HTMLAnchorElement} */ ($("hr-download"));
 const hrDownloads = $("hr-downloads");
@@ -491,16 +489,6 @@ function resetSliders() {
   draw();
 }
 
-/** Reset loses the student's tuning, so ask first, in the page's own dialog. Nothing moved: just reset. */
-function askToResetSliders() {
-  const moved = Object.entries(sliders).some(([name, slider]) => name in initialSliders && slider.value !== initialSliders[name]);
-  if (!moved) {
-    resetSliders();
-    return;
-  }
-  resetConfirm.showModal(); // focuses "Keep my settings" (autofocus); Esc keeps them too
-}
-
 let drawQueued = false;
 function queueDraw() {
   if (drawQueued) return;
@@ -676,34 +664,6 @@ function pngWithText(png, entries) {
   return out;
 }
 
-// ---- Full screen ------------------------------------------------------------------------
-
-function inFullscreen() {
-  return viewer.classList.contains("fullscreen");
-}
-
-/** Picture and controls fill the window; also the browser's own full screen where allowed. */
-function enterFullscreen() {
-  if (!picture || inFullscreen()) return;
-  viewer.classList.add("fullscreen");
-  document.body.classList.add("no-scroll");
-  exitButton.hidden = false;
-  fullscreenButton.setAttribute("aria-pressed", "true");
-  exitButton.focus();
-  // Not every browser allows it (e.g. iPhone Safari); the full-window view works regardless.
-  viewer.requestFullscreen?.().catch(() => {});
-}
-
-function exitFullscreen() {
-  if (!inFullscreen()) return;
-  viewer.classList.remove("fullscreen");
-  document.body.classList.remove("no-scroll");
-  exitButton.hidden = true;
-  fullscreenButton.setAttribute("aria-pressed", "false");
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-  fullscreenButton.focus();
-}
-
 // ---- FOV in arcminutes ------------------------------------------------------------------
 
 /** Show the field of view in arcminutes beside its degrees, e.g. "degrees (18 arcminutes)". */
@@ -739,23 +699,7 @@ form.addEventListener("submit", (event) => {
   void onShowStars();
 });
 for (const slider of Object.values(sliders)) slider.addEventListener("input", queueDraw);
-resetButton.addEventListener("click", askToResetSliders);
-$("reset-ok").addEventListener("click", () => {
-  resetSliders();
-  resetConfirm.close();
-});
-$("reset-cancel").addEventListener("click", () => resetConfirm.close());
-resetConfirm.addEventListener("close", () => resetButton.focus());
-fullscreenButton.addEventListener("click", enterFullscreen);
-exitButton.addEventListener("click", exitFullscreen);
-document.addEventListener("keydown", (event) => {
-  // Esc in the reset question closes the question only.
-  if (event.key === "Escape" && inFullscreen() && !resetConfirm.open) exitFullscreen();
-});
-// Leaving the browser's full screen another way (its own Esc handling, a gesture) leaves ours too.
-document.addEventListener("fullscreenchange", () => {
-  if (!document.fullscreenElement && inFullscreen()) exitFullscreen();
-});
+setUpViewer({ sliders, initial: () => initialSliders, reset: resetSliders, hasPicture: () => Boolean(picture) });
 hrButton.addEventListener("click", () => void onHrDiagram());
 dataDownload.addEventListener("click", (event) => {
   event.preventDefault();

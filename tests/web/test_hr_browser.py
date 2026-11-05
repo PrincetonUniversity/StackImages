@@ -126,6 +126,7 @@ def test_home_page_links_to_the_hr_page(site: str, hr_page: Any) -> None:
 def test_open_shows_the_picture(hr_page: Any, m2_file: Path) -> None:
     page = hr_page
     assert page.is_disabled("#hr-button")
+    assert page.is_hidden("#fullscreen")  # no picture yet
     open_file(page, m2_file)
     assert page.is_hidden("#error")
     assert page.text_content("#object-name") == "M 2"
@@ -156,12 +157,69 @@ def test_sliders_change_and_reset_the_picture(hr_page: Any) -> None:
         return str(page.eval_on_selector("#picture", "c => c.toDataURL()"))
 
     start = pixels()
+    page.click("#reset-sliders")  # nothing moved: resets without asking
+    assert not page.evaluate("document.getElementById('reset-confirm').open")
     page.fill("#gamma", "6")
     page.dispatch_event("#gamma", "input")
     page.wait_for_function("document.querySelector('#gamma-value').textContent !== '7.00'")
     assert pixels() != start
+    page.click("#reset-sliders")  # moved: asks first, with Keep my settings focused
+    page.wait_for_function("document.getElementById('reset-confirm').open")
+    assert page.evaluate("document.activeElement.id") == "reset-cancel"
+    page.keyboard.press("Escape")  # Esc keeps them
+    page.wait_for_function("!document.getElementById('reset-confirm').open")
+    assert page.input_value("#gamma") == "6"
+    assert page.evaluate("document.activeElement.id") == "reset-sliders"
     page.click("#reset-sliders")
+    page.wait_for_function("document.getElementById('reset-confirm').open")
+    page.click("#reset-ok")
+    page.wait_for_function("!document.getElementById('reset-confirm').open")
+    assert page.input_value("#gamma") == "2"
     assert pixels() == start
+
+
+def test_full_screen_like_show_clusters(hr_page: Any) -> None:
+    page = hr_page
+    corner = page.evaluate(
+        """() => { const b = document.getElementById('fullscreen').getBoundingClientRect();
+                   const p = document.getElementById('picture').getBoundingClientRect();
+                   return { right: p.right - b.right, top: b.top - p.top }; }"""
+    )
+    assert 0 <= corner["right"] <= 16 and 0 <= corner["top"] <= 16  # on the picture's top-right corner
+    assert page.get_attribute("#fullscreen", "aria-label") == "Full screen"
+    assert page.is_hidden("#exit-fullscreen")
+    page.click("#fullscreen")
+    page.wait_for_selector("#exit-fullscreen:visible")
+    assert page.get_attribute("#fullscreen", "aria-pressed") == "true"
+    layout = page.evaluate(
+        """() => { const v = document.querySelector('.viewer').getBoundingClientRect();
+                   const p = document.getElementById('picture').getBoundingClientRect();
+                   const s = document.getElementById('maxi').getBoundingClientRect();
+                   return { w: v.width, h: v.height, iw: innerWidth, ih: innerHeight,
+                            picture: p.height, slidersVisible: s.bottom <= innerHeight,
+                            bg: getComputedStyle(document.querySelector('.viewer')).backgroundColor }; }"""
+    )
+    assert layout["w"] == layout["iw"] and layout["h"] == layout["ih"]  # fills the window
+    assert layout["picture"] > 0.8 * layout["ih"] - 72  # the picture uses the height
+    assert layout["slidersVisible"] and layout["bg"] == "rgb(0, 0, 0)"
+    # The reset question in full screen stays on top; Esc there closes only the question.
+    page.fill("#colsat", "8")
+    page.dispatch_event("#colsat", "input")
+    page.click("#reset-sliders")
+    page.wait_for_function("document.getElementById('reset-confirm').open")
+    page.keyboard.press("Escape")
+    page.wait_for_function("!document.getElementById('reset-confirm').open")
+    assert page.is_visible("#exit-fullscreen")
+    page.keyboard.press("Escape")  # now Esc leaves full screen
+    page.wait_for_selector("#exit-fullscreen", state="hidden")
+    assert page.get_attribute("#fullscreen", "aria-pressed") == "false"
+    assert page.evaluate("document.activeElement.id") == "fullscreen"
+    page.click("#fullscreen")
+    page.wait_for_selector("#exit-fullscreen:visible")
+    page.click("#exit-fullscreen")
+    page.wait_for_selector("#exit-fullscreen", state="hidden")
+    page.click("#reset-sliders")
+    page.click("#reset-ok")
 
 
 def browser_points(page: Any) -> list[list[float]]:
