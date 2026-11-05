@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT / "web"))
 
 import showclusters as sc  # noqa: E402
 
-WEB_FILES = ("index.html", "app.js", "worker.js", "style.css", "showclusters.py")
+WEB_FILES = ("index.html", "app.js", "stretch.js", "worker.js", "style.css", "showclusters.py")
 CATALOGS = ("NI2021_MessierObjects.csv", "NI2021_NGCObjects.csv", "ICObj.csv")
 APP_PATH = "ShowClusters"  # served at https://princetonuniversity.github.io/StackImages/ShowClusters/
 # The site root is a StackImages home page (web/home.html) linking to the app.
@@ -94,7 +94,9 @@ def build(site: Path, vendor: Path, snapshots: Path | None) -> None:
     (out / "index.html").write_text(page)
     app = (out / "app.js").read_text()
     worker_version = digest(out / "worker.js")[:12]
-    (out / "app.js").write_text(app.replace('new URL("worker.js"', f'new URL("worker.js?v={worker_version}"'))
+    app = app.replace('new URL("worker.js"', f'new URL("worker.js?v={worker_version}"')
+    stretch = f'"./stretch.js?v={digest(out / "stretch.js")[:12]}"'
+    (out / "app.js").write_text(app.replace('"./stretch.js"', stretch))
     (site / ".nojekyll").write_text("")
     shutil.copy2(ROOT / "web" / "style.css", site / "style.css")
     home = (ROOT / "web" / "home.html").read_text()
