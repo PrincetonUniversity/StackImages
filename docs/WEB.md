@@ -1,14 +1,17 @@
-# Show Clusters on the web
+# StackImages on the web
 
-**Live page:** https://princetonuniversity.github.io/StackImages/ShowClusters/
-(see also [HR diagram of your own image](#hr-diagram-of-your-own-image) below)
+**Live pages:**
+
+- Show Clusters: https://princetonuniversity.github.io/StackImages/ShowClusters/
+- HR Diagram of Your Own Image: https://princetonuniversity.github.io/StackImages/HRDiagram/
+  (see [HR diagram of your own image](#hr-diagram-of-your-own-image) below)
 
 The site root, https://princetonuniversity.github.io/StackImages/, is a StackImages home page
-(`web/home.html`) that links to Show Clusters and to the desktop app. GitHub serves a project site
+(`web/home.html`) that links to both pages and to the desktop app. GitHub serves a project site
 at `<org>.github.io/<repo>/`, so the app lives in a `ShowClusters/` folder of this repo's site rather
 than at `…github.io/ShowClusters/`, which would need a renamed or separate repo.
 
-The web page does what `ShowClusters` (in `ass.py`) does: look up a Messier, NGC or IC
+Show Clusters does what `ShowClusters` (in `ass.py`) does: look up a Messier, NGC or IC
 object, download its Gaia DR3 stars, draw the simulated star field, and plot the HR
 diagram. It runs entirely in the student's browser with
 [Pyodide](https://pyodide.org/) (Python compiled to WebAssembly), so there is nothing to
@@ -273,12 +276,21 @@ image, above a browser tab's 4 GB limit; the port peaks at about 1.7 GB:
 ### Kept exactly as in `ass.py`
 
 These look like slips in `ass.py`. They are reproduced on purpose so the page matches the desktop
-app, and are listed here so they can be raised with Bob:
+app, and are filed as issues for Bob. If one is fixed in `ass.py`, change `web/hrimage.py` and
+`tests/desktop/test_hr_equivalence.py` with it.
 
 - The color filter `abs(log(G/B) > 2)` takes the absolute value of the comparison, so it drops
   stars with G/B > e² but not G/B < e⁻² (the R/G test is a true `|log(R/G)| > 2`).
-- The Color Diagram's upper axis limits are padded using the already-padded lower limits.
+  ([#21](https://github.com/PrincetonUniversity/StackImages/issues/21))
 - The `shape='auto'` cluster mask is computed but not applied (see above).
+  ([#22](https://github.com/PrincetonUniversity/StackImages/issues/22))
+- The Color Diagram's upper axis limits are padded using the already-padded lower limits.
+  ([#24](https://github.com/PrincetonUniversity/StackImages/issues/24))
+
+Two more issues found while porting don't affect the page: `fig5axes` is never set when `GUI` is
+False ([#23](https://github.com/PrincetonUniversity/StackImages/issues/23); the equivalence test
+supplies the axes), and `ass.py`'s star imports only work at the pinned numpy and scipy versions
+([#25](https://github.com/PrincetonUniversity/StackImages/issues/25)).
 
 ### Limits and timing
 
@@ -292,9 +304,14 @@ cluster is faster.
 
 | Workflow | Runs on | Does |
 |---|---|---|
-| `ci.yml` (desktop) | push/PR to `main`, except web-only files; manual | Desktop GUI tests under Xvfb, equivalence test, packaging tests in `ci/desktop-tests.Dockerfile`; builds `PyWin.tar`; on `main`, publishes release `v<ass.py version>.<n>` when the bundle's app/data files changed (`scripts/next_release.py`) |
-| `pages.yml` (web) | push/PR touching the web files; manual | eslint + tsc (Node container), ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`), verified Pyodide download, site build with the latest snapshots, `StackImages-web.zip` of the site and `HRDiagram-web.zip` of the HR page; deploys on `main`, then publishes each zip whose contents changed as a release (`web-*`, `hrdiagram-*`) |
+| `ci.yml` (desktop) | push/PR to `main`, except web-only files and Markdown; manual | Desktop GUI tests under Xvfb, equivalence test, packaging tests in `ci/desktop-tests.Dockerfile`; builds `PyWin.tar`; on `main`, publishes release `v<ass.py version>.<n>` when the bundle's app/data files changed (`scripts/next_release.py`) |
+| `pages.yml` (web) | push/PR touching the web files (not Markdown); manual | eslint + tsc (Node container), ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`), verified Pyodide download, site build with the latest snapshots, `StackImages-web.zip` of the site and `HRDiagram-web.zip` of the HR page; deploys on `main`, then publishes each zip whose contents changed as a release (`web-*`, `hrdiagram-*`) |
 | `snapshots.yml` | manual only | Fetches ~75 clusters (`scripts/build_snapshots.py`: GAVO in pieces, ESA as fallback, lower magnitude limit if both fail), validates, publishes a `snapshots-*` release, redeploys the page. Resumes from the last release; re-run to fill gaps |
+
+Documentation-only changes (`README.md`, anything under `docs/`, any other `.md` file) start no
+workflow: there is nothing to test, deploy or release. The README inside `PyWin.tar` is refreshed
+by the next desktop release, and README/LICENSE edits alone never make one. To redeploy or release
+anyway, run the workflow manually (Actions → Run workflow).
 
 Nothing generated is committed: Pyodide (`build/vendor/`), the site (`_site/`) and
 snapshots (`build/snapshots/`) are gitignored and rebuilt or downloaded by the workflows.
@@ -369,7 +386,10 @@ them.
 - Uploads: at most 50 MB and 300,000 stars, with the required Gaia columns; anything else is
   rejected with a message naming the problem. A file centred on a different object is
   rejected or flagged.
-- The only outside service the page contacts is GAVO; the browser tests enforce this.
+- The only outside service Show Clusters contacts is GAVO; the browser tests enforce this.
+- HR Diagram of Your Own Image contacts no outside service, and the student's image never
+  leaves the browser. It refuses files over 250 MB or 20 megapixels, non-FITS files, images with
+  NaN or infinite pixels, and impossible magnitudes, with a message naming the problem.
 - Pyodide and every wheel are checked against pinned SHA-256 hashes at build time.
 
 ## Troubleshooting
