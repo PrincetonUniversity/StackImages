@@ -45,8 +45,16 @@
           <dt id="position-label" hidden>RA, Dec</dt><dd id="position" hidden></dd>
         </dl>
         <div class="viewer" role="region" aria-label="Picture and picture controls">
+          <button id="exit-fullscreen" type="button" class="exit" aria-label="Exit full screen" hidden>✕ Exit full screen <span class="key">(Esc)</span></button>
           <div class="picture-frame">
             <canvas id="picture" width="1" height="1" aria-label="Your image, as adjusted by the sliders"></canvas>
+            <button id="fullscreen" type="button" class="icon-button" aria-label="Full screen" aria-pressed="false"
+                    title="Full screen: the picture and sliders, as large as your screen allows" disabled>
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+                <path d="M5 19 19 5M13 5h6v6M11 19H5v-6" fill="none" stroke="currentColor" stroke-width="2.2"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
           </div>
           <div class="controls">
             <div class="sliders">
@@ -71,6 +79,14 @@
               <button id="reset-sliders" type="button" class="secondary small">Reset sliders</button>
             </div>
           </div>
+          <dialog id="reset-confirm" aria-labelledby="reset-title" aria-describedby="reset-text">
+            <h3 id="reset-title">Reset the sliders?</h3>
+            <p id="reset-text">They go back to where they were when the picture was first shown. Your current settings are lost.</p>
+            <div class="dialog-actions">
+              <button id="reset-cancel" type="button" class="secondary" autofocus>Keep my settings</button>
+              <button id="reset-ok" type="button">Reset sliders</button>
+            </div>
+          </dialog>
         </div>
       </div>
     </section>

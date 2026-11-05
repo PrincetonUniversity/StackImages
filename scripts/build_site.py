@@ -36,7 +36,7 @@ APP_PATH = "ShowClusters"  # served at https://princetonuniversity.github.io/Sta
 # (../ShowClusters/vendor/) rather than a second copy.
 HR_PATH = "HRDiagram"
 HR_PAGE_FILES = ("index.html", "app.js", "worker.js")  # from web/hrdiagram/
-HR_SHARED_FILES = ("stretch.js", "style.css", "showclusters.py", "hrimage.py")  # from web/
+HR_SHARED_FILES = ("stretch.js", "viewer.js", "style.css", "showclusters.py", "hrimage.py")  # from web/
 # The site root is a StackImages home page (web/home.html) linking to the app.
 
 
@@ -139,8 +139,9 @@ def build_hr_page(out: Path) -> None:
     (out / "index.html").write_text(page)
     app = (out / "app.js").read_text()
     app = app.replace('new URL("worker.js"', f'new URL("worker.js?v={digest(out / "worker.js")[:12]}"')
-    stretch = f'"./stretch.js?v={digest(out / "stretch.js")[:12]}"'
-    (out / "app.js").write_text(app.replace('"../stretch.js"', stretch))
+    for module in ("stretch.js", "viewer.js"):
+        app = app.replace(f'"../{module}"', f'"./{module}?v={digest(out / module)[:12]}"')
+    (out / "app.js").write_text(app)
 
 
 def main(argv: list[str] | None = None) -> int:
