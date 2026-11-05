@@ -60,8 +60,8 @@ def site_files(site: Path) -> list[Path]:
     return sorted(p for p in site.rglob("*") if p.is_file() and p.name not in SKIP)
 
 
-def entry(name: str) -> zipfile.ZipInfo:
-    info = zipfile.ZipInfo(f"{FOLDER}/{name}", TIMESTAMP)
+def entry(name: str, folder: str = FOLDER) -> zipfile.ZipInfo:
+    info = zipfile.ZipInfo(f"{folder}/{name}", TIMESTAMP)
     info.external_attr = 0o644 << 16  # rw-r--r--, whatever the build machine's umask
     info.create_system = 3  # Unix, so those permissions are honoured
     info.compress_type = zipfile.ZIP_STORED if Path(name).suffix in STORED else zipfile.ZIP_DEFLATED
