@@ -145,8 +145,27 @@ DR3, with saved copies and a manual ESA-archive upload as fallbacks.
 Details for maintainers (architecture, data sources, whether star counts match the desktop
 app, workflows, local development, troubleshooting): [docs/WEB.md](docs/WEB.md).
 
+HR diagram of your own image in the browser
+-------------------------------------------
+https://princetonuniversity.github.io/StackImages/HRDiagram/ does what the desktop app's
+**Open an RGB fits file**, **HR diagram** and **Color Diagram** buttons do, with nothing to install:
+
+1. Choose an RGB (or mono) FITS image, such as a stacked image of a star cluster. It stays on your
+   computer; Python in the page reads it. Up to 250 MB and 20 megapixels; a crop around the cluster
+   is faster.
+2. Adjust the picture with the same sliders as the desktop window.
+3. Set **Brightest star (mag)** (empty means 10) and **Faintest star (mag)** (20), then click
+   **HR diagram** or **Color Diagram**. The first diagram of a large image can take a minute while
+   the stars are found and measured; after that, changing the magnitudes redraws at once.
+4. **Download diagram (PNG)** saves the diagram; **Download points (CSV)** saves each plotted star's
+   position, fluxes, color and magnitude.
+
+`web/hrimage.py` ports `get_RGB_image` and `makeHRdiag_new` from `ass.py` (unchanged), and an
+automated test requires its diagrams to be identical to the desktop app's. See
+[docs/WEB.md](docs/WEB.md#hr-diagram-of-your-own-image).
+
 The site root, https://princetonuniversity.github.io/StackImages/, is a short StackImages home page
-linking to Show Clusters and to the desktop app.
+linking to Show Clusters, the HR diagram page and the desktop app.
 
 To host a copy on another web site, download
 https://princetonuniversity.github.io/StackImages/StackImages-web.zip, unzip it, and upload the

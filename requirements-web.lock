@@ -61,6 +61,7 @@ numpy==2.2.5
     #   contourpy
     #   matplotlib
     #   pyerfa
+    #   scipy
 packaging==26.3
     # via
     #   astropy
@@ -101,6 +102,8 @@ requests==2.34.2
     #   astroquery
     #   pyvo
 ruff==0.17.3
+    # via -r requirements-web.in
+scipy==1.14.1
     # via -r requirements-web.in
 six==1.17.0
     # via html5lib

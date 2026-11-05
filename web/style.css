@@ -91,6 +91,12 @@ body.no-scroll { overflow: hidden; }
 .sliders output { color: #536b82; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; overflow: hidden; }
 .sliders input { width: 100%; padding: 0; border: 0; }
 #hr { display: block; width: 100%; height: auto; margin-top: 18px; border-radius: 6px; background: black; }
+/* HR Diagram of Your Own Image: a picture of any shape, and its diagrams. */
+.picture-frame { justify-self: center; width: 100%; }
+#picture { display: block; max-width: 100%; max-height: calc(100svh - 32px); width: auto; height: auto;
+  margin: 0 auto; background: black; border-radius: 6px; }
+#diagram { display: block; width: 100%; max-width: 1000px; height: auto; margin-top: 18px; border-radius: 6px;
+  background: black; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem; background: #f5f8fb; padding: 12px; border-radius: 6px; }
 summary { cursor: pointer; font-weight: 600; }
 details label { display: block; font-weight: 600; margin: 16px 0 8px; }

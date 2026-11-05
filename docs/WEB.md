@@ -1,6 +1,7 @@
 # Show Clusters on the web
 
 **Live page:** https://princetonuniversity.github.io/StackImages/ShowClusters/
+(see also [HR diagram of your own image](#hr-diagram-of-your-own-image) below)
 
 The site root, https://princetonuniversity.github.io/StackImages/, is a StackImages home page
 (`web/home.html`) that links to Show Clusters and to the desktop app. GitHub serves a project site
@@ -214,6 +215,78 @@ Small differences are still possible in these cases:
 - **HR diagrams after repeated clicks.** Not a count difference: last year's app changed
   its stored data each time "HR Diagram" was clicked in Absolute mode, so a student who
   clicked several times could have a slightly different diagram than a first click gives.
+
+## HR diagram of your own image
+
+**Live page:** https://princetonuniversity.github.io/StackImages/HRDiagram/
+
+The page does what these desktop buttons do, in the same order as the StackImages window:
+
+| Desktop (StackImages window) | `ass.py` | Page | Port (`web/hrimage.py`) |
+|---|---|---|---|
+| Open an RGB fits file: **Select** | `get_RGB_image` → `show_stacked_image` → `slidershow` | 1. choose a FITS file; 2. the picture and its sliders | `read_rgb_fits`, `slidershow_input` + `showclusters.display_base`, `web/stretch.js` |
+| Brightest star (mag), Faintest star (mag) | `mag0`, `mag1` (empty → 10 and 20) | the same two boxes | `parse_magnitude` |
+| **HR diagram** | `GUI_HRdiag` → `makeHRdiag_new(..., shape='auto', fignum=1, thresh=1e-5)` → `findstars`, `fwhm` | **HR diagram** | `measure` (→ `findstars`, `fwhm`), `plot_points`, `hr_figure` |
+| **Color Diagram** | `GUI_ColorDiag` → the same, `fignum=6` | **Color Diagram** | `color_figure` |
+
+Files: `web/hrdiagram/` (the page: `index.html`, `app.js`, `worker.js`), `web/hrimage.py`, and the
+shared `web/stretch.js` (slidershow's stretch, also used by Show Clusters), `web/style.css` and
+`web/showclusters.py` (`display_base`). The site build puts them in `HRDiagram/`. The page uses
+Show Clusters' copy of Pyodide (`../ShowClusters/vendor/`), plus scipy for `convolve2d`.
+
+**Equivalence test.** `tests/desktop/test_hr_equivalence.py` runs Bob's unmodified
+`get_RGB_image`, `GUI_HRdiag` and `GUI_ColorDiag` in the desktop container, replacing only the wx
+widgets, the file dialog and the plot window, on synthetic star clusters (`tests/web/hrfixtures.py`:
+stars of several widths, hot pixels, extreme colors). The port must give the **identical** image
+array, name and picture input, and identical plotted points (positions, sizes, face and edge
+colors), axis limits, titles and labels, for both diagrams and several magnitude settings. In
+the browser, `tests/web/test_hr_browser.py` checks that Pyodide's plotted points match the native
+port's.
+
+### What the port does differently (and why the points are still the same)
+
+The arithmetic follows `ass.py` statement by statement, with the same dtypes. Only memory and
+skipped work differ. Run unchanged, `makeHRdiag_new` peaks at about 5.5 GB for a 19-megapixel
+image, above a browser tab's 4 GB limit; the port peaks at about 1.7 GB:
+
+- `findstars` computes one filter at a time, applies its test, and frees it, instead of holding
+  18 full-size arrays. The eight neighbour filters (M1–M8) are only tested for ≥ 0, so they are
+  written as the equivalent neighbour comparisons. Filters it never uses (M9–M12, M21, M22) are
+  skipped.
+- FWHM is measured only at candidate stars, in the same order, instead of looping over every pixel.
+- The `shape='auto'` cluster mask is not computed: `ass.py` computes it but never applies it
+  (`k = k&mask` is commented out).
+- Detection and photometry don't depend on the magnitude boxes, so they run once per image;
+  changing the magnitudes, or switching to the Color Diagram, redraws from the stored
+  measurements. The desktop app recomputes everything on each click, with the same result.
+
+### Deliberate differences from the desktop app
+
+| Desktop app | Web page | Why |
+|---|---|---|
+| Picture at full resolution | Averaged down to at most 1600 px on its longest side; the slider ranges and starting positions come from the full image | Browser memory and drawing speed; the diagrams always use every pixel |
+| Pixel info, star info, FWHM, Astrometric Analysis, Deconvolve, Unsharp Mask, stacking | Not included | Not needed for the HR and color diagrams |
+| Writes `txt/color_mag.txt` | **Download points (CSV)**: every plotted star's position, fluxes, color and magnitude | Browser equivalent, with more detail |
+| "Save" in the plot window | **Download diagram (PNG)** | Browser equivalent |
+| No checks on the file | Files over 250 MB or 20 megapixels, non-FITS files, images with NaN/infinite pixels and impossible magnitudes are refused with an explanation | `ass.py` would crash or plot nothing |
+
+### Kept exactly as in `ass.py`
+
+These look like slips in `ass.py`. They are reproduced on purpose so the page matches the desktop
+app, and are listed here so they can be raised with Bob:
+
+- The color filter `abs(log(G/B) > 2)` takes the absolute value of the comparison, so it drops
+  stars with G/B > e² but not G/B < e⁻² (the R/G test is a true `|log(R/G)| > 2`).
+- The Color Diagram's upper axis limits are padded using the already-padded lower limits.
+- The `shape='auto'` cluster mask is computed but not applied (see above).
+
+### Limits and timing
+
+Measured in Chromium on an Apple-silicon Mac with a synthetic 5,345 × 3,551 RGB image (217 MB,
+like a cropped M2 stack): opening it took 5 s, the first HR diagram 32 s, and each later diagram
+0.3 s. Most of the first diagram's time is `fwhm`, called once per candidate star exactly as
+`ass.py` does. The page refuses files over 250 MB or 20 megapixels; a smaller crop around the
+cluster is faster.
 
 ## Workflows
 

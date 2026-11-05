@@ -2,15 +2,15 @@ name: CI (desktop)
 
 # Desktop wxPython app: tests in a pinned container under a virtual display,
 # then the minimal student bundle (PyWin.tar). The web page has its own
-# workflow (pages.yml); the two never block each other. web/showclusters.py still
-# triggers this workflow because the equivalence test checks it against ass.py.
+# workflow (pages.yml); the two never block each other. web/showclusters.py and
+# web/hrimage.py still trigger this workflow because equivalence tests check them against ass.py.
 on:
   push:
     branches: [main]
-    paths-ignore: ["web/*.js", "web/*.html", "web/*.css", "docs/**", ".github/workflows/pages.yml"]
+    paths-ignore: ["web/*.js", "web/*.html", "web/*.css", "web/hrdiagram/**", "docs/**", ".github/workflows/pages.yml"]
   pull_request:
     branches: [main]
-    paths-ignore: ["web/*.js", "web/*.html", "web/*.css", "docs/**", ".github/workflows/pages.yml"]
+    paths-ignore: ["web/*.js", "web/*.html", "web/*.css", "web/hrdiagram/**", "docs/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:

@@ -1,7 +1,8 @@
-# Tools for the web page: native tests of web/showclusters.py, site build, lint.
+# Tools for the web page: native tests of web/showclusters.py and web/hrimage.py, site build, lint.
 # Pin with: uv pip compile requirements-web.in -o requirements-web.lock --python-version 3.13
 numpy==2.2.5        # same versions Pyodide 0.29.3 ships
 astropy==7.0.1
+scipy==1.14.1        # same version Pyodide 0.29.3 ships (web/hrimage.py)
 matplotlib          # Pyodide ships 3.8.4, which has no native 3.13 wheel; browser tests cover it
 astroquery
 pytest

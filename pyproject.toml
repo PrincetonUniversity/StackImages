@@ -12,7 +12,7 @@ src = [".", "web", "scripts"]  # same import grouping on every machine
 select = ["E", "F", "W", "I", "B", "UP", "N"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["showclusters", "build_site", "build_snapshots", "vendor_pyodide", "next_release", "fakegaia", "ass"]
+known-first-party = ["showclusters", "hrimage", "hrfixtures", "build_site", "build_snapshots", "vendor_pyodide", "next_release", "fakegaia", "ass"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/desktop/test_gui_titles.py" = ["UP031", "UP022"]  # pre-existing test, unchanged style
@@ -21,7 +21,7 @@ known-first-party = ["showclusters", "build_site", "build_snapshots", "vendor_py
 python_version = "3.11"
 ignore_missing_imports = true
 check_untyped_defs = true
-files = ["web/showclusters.py", "scripts", "tests/web", "tests/packaging", "tests/desktop/test_web_equivalence.py"]
+files = ["web/showclusters.py", "web/hrimage.py", "scripts", "tests/web", "tests/packaging", "tests/desktop/test_web_equivalence.py", "tests/desktop/test_hr_equivalence.py"]
 
 [[tool.mypy.overrides]]
 module = ["ass"]

@@ -19,7 +19,7 @@ from pathlib import Path
 VERSION = "0.29.3"
 BASE = f"https://cdn.jsdelivr.net/pyodide/v{VERSION}/full/"
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGES = ("numpy", "matplotlib", "astropy")
+PACKAGES = ("numpy", "matplotlib", "astropy", "scipy")  # scipy: HR diagram page only
 CORE_SHA256 = {
     "pyodide.js": "718d40f1c015dd25ec724cc8fc4e2325d6a45a92ae225121ff6953f224a16f72",
     # pyodide.js names it; browsers' developer tools ask for it (a 404 otherwise)
