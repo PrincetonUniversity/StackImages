@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>HR Diagram of Your Own Image</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" type="module"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow"><a href="../">StackImages</a> · HR Diagram</p>
+      <h1>HR Diagram of Your Own Image</h1>
+      <p class="intro">Open an RGB FITS image of a star cluster, adjust the picture, and draw its
+        Hertzsprung–Russell diagram the way the StackImages desktop app does.</p>
+    </header>
+
+    <section class="panel" aria-labelledby="open-heading">
+      <h2 id="open-heading">1. Open an RGB fits file</h2>
+      <label for="file">FITS image <span class="hint">(.fit, .fits, .fts)</span></label>
+      <input id="file" type="file" accept=".fit,.fits,.fts" disabled aria-describedby="file-hint">
+      <p id="file-hint" class="hint">Your image stays on this computer: it is read by Python running in this page.
+        Up to <span id="max-mb">250</span> MB and <span id="max-mp">20</span> megapixels. A crop around the
+        cluster works best and is faster.</p>
+      <p id="status" role="status" aria-live="polite">Loading Python… The first visit downloads about 60 MB.</p>
+      <div id="progress" hidden>
+        <progress id="progress-bar" aria-label="Working"></progress>
+        <span id="progress-text" aria-hidden="true"></span>
+      </div>
+      <p id="error" role="alert" hidden></p>
+      <details id="load-details" hidden><summary>Loading details</summary><pre id="load-error"></pre></details>
+      <button id="retry" class="secondary" type="button" hidden>Reload tool</button>
+    </section>
+
+    <section id="picture-panel" class="panel" aria-labelledby="picture-heading">
+      <h2 id="picture-heading">2. The picture</h2>
+      <p id="picture-empty" class="placeholder">Your image appears here after you choose a file.</p>
+      <div id="picture-content" hidden>
+        <dl class="facts">
+          <dt>Object</dt><dd id="object-name"></dd>
+          <dt>Image</dt><dd id="image-size"></dd>
+          <dt id="position-label" hidden>RA, Dec</dt><dd id="position" hidden></dd>
+        </dl>
+        <div class="viewer" role="region" aria-label="Picture and picture controls">
+          <div class="picture-frame">
+            <canvas id="picture" width="1" height="1" aria-label="Your image, as adjusted by the sliders"></canvas>
+          </div>
+          <div class="controls">
+            <div class="sliders">
+              <label for="colsat">color saturation</label>
+              <output id="colsat-value" for="colsat"></output>
+              <input id="colsat" type="range" min="-1" max="10" step="0.05" value="5">
+              <label for="gamma">nonlinear stretch</label>
+              <output id="gamma-value" for="gamma"></output>
+              <input id="gamma" type="range" min="0" max="10" step="0.05" value="2">
+              <label for="mini">min</label>
+              <output id="mini-value" for="mini"></output>
+              <input id="mini" type="range" step="any">
+              <label for="maxi">max</label>
+              <output id="maxi-value" for="maxi"></output>
+              <input id="maxi" type="range" step="any">
+            </div>
+            <div class="actions">
+              <a id="picture-download" class="download secondary" href="#">Download picture (PNG)</a>
+            </div>
+            <p id="picture-note" class="hint"></p>
+            <div class="reset-row">
+              <button id="reset-sliders" type="button" class="secondary small">Reset sliders</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="hr-panel" class="panel" aria-labelledby="hr-heading">
+      <h2 id="hr-heading">3. HR diagram</h2>
+      <form id="mags" class="grid" novalidate>
+        <label for="brightest">Brightest star (mag)</label>
+        <div><input id="brightest" inputmode="decimal" placeholder="10" aria-describedby="brightest-hint">
+          <span id="brightest-hint" class="hint">the magnitude given to the brightest star; empty means 10</span></div>
+        <label for="faintest">Faintest star (mag)</label>
+        <div><input id="faintest" inputmode="decimal" value="20" aria-describedby="faintest-hint">
+          <span id="faintest-hint" class="hint">fainter stars are left out; empty means 20</span></div>
+      </form>
+      <div class="actions">
+        <button id="hr-button" type="button" disabled>HR diagram</button>
+        <button id="color-button" type="button" class="secondary" disabled>Color Diagram</button>
+      </div>
+      <p id="diagram-summary" hidden></p>
+      <img id="diagram" alt="" hidden>
+      <div id="diagram-downloads" class="actions" hidden>
+        <a id="diagram-download" class="download" href="#">Download diagram (PNG)</a>
+        <a id="points-download" class="download secondary" href="#">Download points (CSV)</a>
+      </div>
+    </section>
+
+    <footer>
+      <p>Based on the HR diagram and color diagram in the
+        <a href="https://github.com/PrincetonUniversity/StackImages" target="_blank" rel="noopener">StackImages</a>
+        desktop app by Robert Vanderbei, using the same star finding, photometry and plotting.
+        Python runs in your browser via <a href="https://pyodide.org/" target="_blank" rel="noopener">Pyodide</a>;
+        nothing is uploaded.</p>
+    </footer>
+  </main>
+</body>
+</html>
