@@ -1,7 +1,7 @@
 """Pack the built site (_site/) into one zip for hosting on any static web server.
 
 Unzipping gives a StackImages/ folder: the home page, ShowClusters/ (the page, Pyodide
-and the saved snapshots) and HOSTING.txt. Every link inside is relative, so the folder
+and the saved snapshots), HRDiagram/ and HOSTING.txt. Every link inside is relative, so the folder
 works from any directory of any web server. The zip is reproducible: the same site
 gives the same bytes.
 
@@ -24,18 +24,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FOLDER = "StackImages"
 NAME = "StackImages-web.zip"
-SKIP = {".nojekyll", NAME}  # GitHub Pages only; the zip never contains itself
+SKIP = {".nojekyll", NAME, "HRDiagram-web.zip"}  # GitHub Pages only; the zips (zip_hr.py too) never go inside
 STORED = {".whl", ".zip", ".gz"}  # already compressed
 TIMESTAMP = (1980, 1, 1, 0, 0, 0)  # fixed, so rebuilding an unchanged site gives the same zip
 BUILD_RECORD = f"{FOLDER}/ShowClusters/manifest.json"  # holds the build time; its file list is
 # made of hashes of the other files, so leaving it out loses nothing
 
 HOSTING = """\
-Show Clusters (StackImages): a copy to put on your own web site
-================================================================
+StackImages web pages: a copy to put on your own web site
+=========================================================
 
 1. Upload this whole StackImages folder to any directory of your web site, unchanged.
-   The home page is StackImages/index.html; Show Clusters is StackImages/ShowClusters/.
+   The home page is StackImages/index.html; Show Clusters is StackImages/ShowClusters/
+   and HR Diagram of Your Own Image is StackImages/HRDiagram/.
    Nothing to install or run on the server: these are ordinary static files.
 
 2. Open it through the web server (https://...), not from your disk (file:///...):
@@ -45,11 +46,12 @@ Show Clusters (StackImages): a copy to put on your own web site
    sends for its .wasm, .whl, .npy and data files (application/octet-stream is fine),
    as long as .js, .html and .css have their usual types.
 
-The page reads star data from GAVO (https://dc.g-vo.org) in the visitor's browser, so a
-Content-Security-Policy must allow connect-src https://dc.g-vo.org (https: covers it).
+Show Clusters reads star data from GAVO (https://dc.g-vo.org) in the visitor's browser,
+so a Content-Security-Policy must allow connect-src https://dc.g-vo.org (https: covers it).
+Both pages show diagrams as data: images, so it must also allow img-src data:.
 
 Built from https://github.com/PrincetonUniversity/StackImages
-(the same page as https://princetonuniversity.github.io/StackImages/ShowClusters/).
+(the same pages as https://princetonuniversity.github.io/StackImages/).
 Data credits and licences are listed at the bottom of the page.
 """
 

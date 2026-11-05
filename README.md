@@ -169,8 +169,10 @@ linking to Show Clusters, the HR diagram page and the desktop app.
 
 To host a copy on another web site, download
 https://princetonuniversity.github.io/StackImages/StackImages-web.zip, unzip it, and upload the
-`StackImages` folder unchanged; no server settings are needed. Each version is also on the
-[Releases](https://github.com/PrincetonUniversity/StackImages/releases) page as `web-*` (see "Hosting a copy elsewhere" in
+`StackImages` folder unchanged; no server settings are needed. For the HR diagram page alone,
+download https://princetonuniversity.github.io/StackImages/HRDiagram-web.zip (about 43 MB) and upload
+its `HRDiagram` folder the same way. Each version of both is also on the
+[Releases](https://github.com/PrincetonUniversity/StackImages/releases) page, as `web-*` and `hrdiagram-*` (see "Hosting a copy elsewhere" in
 [docs/WEB.md](docs/WEB.md)).
 
 Quick local run (Docker only):

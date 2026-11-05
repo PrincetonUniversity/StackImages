@@ -12,6 +12,7 @@ on:
       - "scripts/build_site.py"
       - "scripts/build_snapshots.py"
       - "scripts/zip_site.py"
+      - "scripts/zip_hr.py"
       - "tests/web/**"
       - "csv/NI2021_*.csv"
       - "csv/ICObj.csv"
@@ -34,6 +35,7 @@ on:
       - "scripts/build_site.py"
       - "scripts/build_snapshots.py"
       - "scripts/zip_site.py"
+      - "scripts/zip_hr.py"
       - "tests/web/**"
       - "csv/NI2021_*.csv"
       - "csv/ICObj.csv"
@@ -63,6 +65,7 @@ jobs:
     timeout-minutes: 40
     outputs:
       fingerprint: ${{ steps.zip.outputs.fingerprint }}
+      hr_fingerprint: ${{ steps.zip.outputs.hr_fingerprint }}
       snapshots: ${{ steps.snapshots.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
@@ -110,17 +113,22 @@ jobs:
           fi
       - name: Build site
         run: docker-compose run --rm -T web-tools python scripts/build_site.py ${{ steps.snapshots.outputs.args }}
-      - name: Zip the site for hosting elsewhere (served as StackImages-web.zip)
+      - name: Zip the site, and the HR page on its own, for hosting elsewhere
         id: zip
         run: |
           docker-compose run --rm -T web-tools python scripts/zip_site.py
+          docker-compose run --rm -T web-tools python scripts/zip_hr.py
           fingerprint=$(docker-compose run --rm -T web-tools python scripts/zip_site.py --fingerprint _site/StackImages-web.zip)
+          hr_fingerprint=$(docker-compose run --rm -T web-tools python scripts/zip_hr.py --fingerprint _site/HRDiagram-web.zip)
           echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+          echo "hr_fingerprint=$hr_fingerprint" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
         if: github.event_name != 'pull_request'
         with:
           name: site-zip
-          path: _site/StackImages-web.zip
+          path: |
+            _site/StackImages-web.zip
+            _site/HRDiagram-web.zip
           if-no-files-found: error
           retention-days: 7
       - uses: actions/configure-pages@v6
@@ -144,9 +152,11 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v5
 
-  # The zip also as a release (web-YYYYMMDD-HHMM, never marked Latest, so the desktop
-  # download stays Latest). Made only when the site's contents changed: the fingerprint
-  # leaves out the build time, so a redeploy of the same site makes no release.
+  # Each zip also as a release, made only when its contents changed (the fingerprint leaves
+  # out the build time, so a redeploy of the same site makes none) and never marked Latest,
+  # so the desktop download stays Latest:
+  #   web-YYYYMMDD-HHMM        StackImages-web.zip, the whole site
+  #   hrdiagram-YYYYMMDD-HHMM  HRDiagram-web.zip, HR Diagram of Your Own Image on its own
   release:
     needs: [build, deploy]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -157,36 +167,51 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       FINGERPRINT: ${{ needs.build.outputs.fingerprint }}
+      HR_FINGERPRINT: ${{ needs.build.outputs.hr_fingerprint }}
       SNAPSHOTS: ${{ needs.build.outputs.snapshots }}
     steps:
       - uses: actions/download-artifact@v8
         with:
           name: site-zip
-      - name: Publish a web-* release if the site changed
+      - name: Publish web-* and hrdiagram-* releases for the zips that changed
         run: |
           set -euo pipefail
-          [[ "$FINGERPRINT" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::bad fingerprint '$FINGERPRINT'"; exit 1; }
-          last=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
-                   --jq '[.[].tagName | select(startswith("web-"))] | sort | last // ""')
-          if [ -n "$last" ]; then
-            body=$(gh release view "$last" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
-            if grep -qF "Site fingerprint: $FINGERPRINT" <<< "$body"; then
-              echo "The site is unchanged since $last; no new release."
-              exit 0
+          # publish PREFIX ZIP FINGERPRINT TITLE NOTES_FILE
+          publish() {
+            local prefix=$1 file=$2 print=$3 title=$4 notes=$5 last tag
+            [[ "$print" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::bad fingerprint '$print' for $file"; exit 1; }
+            [ -s "$file" ] || { echo "::error::$file is missing"; exit 1; }
+            last=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
+                     --jq "[.[].tagName | select(startswith(\"$prefix-\"))] | sort | last // \"\"")
+            if [ -n "$last" ] && gh release view "$last" --repo "$GITHUB_REPOSITORY" --json body --jq .body \
+                 | grep -qF "Site fingerprint: $print"; then
+              echo "$file is unchanged since $last; no new release."
+              return 0
             fi
-          fi
-          tag="web-$(date -u +%Y%m%d-%H%M)"
-          cat > notes.md <<EOF
-          Show Clusters as one zip, for hosting a copy on another web site. Unzip it and upload the
-          \`StackImages\` folder unchanged; no server settings are needed (see HOSTING.txt inside).
+            tag="$prefix-$(date -u +%Y%m%d-%H%M)"
+            printf '\nBuilt from %s.\n\nSite fingerprint: %s\n' "$GITHUB_SHA" "$print" >> "$notes"
+            gh release create "$tag" "$file" --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --latest=false --title "$title $tag" --notes-file "$notes"
+            echo "Published $tag"
+          }
+
+          cat > web-notes.md <<EOF
+          The StackImages web pages (Show Clusters and HR Diagram of Your Own Image) as one zip,
+          for hosting a copy on another web site. Unzip it and upload the \`StackImages\` folder
+          unchanged; no server settings are needed (see HOSTING.txt inside).
 
           The current version is always at https://princetonuniversity.github.io/StackImages/StackImages-web.zip
 
-          Built from $GITHUB_SHA with saved snapshots ${SNAPSHOTS:-none}.
-
-          Site fingerprint: $FINGERPRINT
+          Saved snapshots: ${SNAPSHOTS:-none}.
           EOF
-          gh release create "$tag" StackImages-web.zip --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" --latest=false \
-            --title "Show Clusters web copy $tag" --notes-file notes.md
-          echo "Published $tag"
+          publish web StackImages-web.zip "$FINGERPRINT" "StackImages web copy" web-notes.md
+
+          cat > hr-notes.md <<EOF
+          HR Diagram of Your Own Image on its own (about 43 MB, with its own copy of Pyodide),
+          for hosting on another web site. Unzip it and upload the \`HRDiagram\` folder unchanged;
+          no server settings are needed (see HOSTING.txt inside).
+
+          The current version is always at https://princetonuniversity.github.io/StackImages/HRDiagram-web.zip
+          and the page itself at https://princetonuniversity.github.io/StackImages/HRDiagram/
+          EOF
+          publish hrdiagram HRDiagram-web.zip "$HR_FINGERPRINT" "HR Diagram web copy" hr-notes.md

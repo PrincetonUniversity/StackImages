@@ -293,7 +293,7 @@ cluster is faster.
 | Workflow | Runs on | Does |
 |---|---|---|
 | `ci.yml` (desktop) | push/PR to `main`, except web-only files; manual | Desktop GUI tests under Xvfb, equivalence test, packaging tests in `ci/desktop-tests.Dockerfile`; builds `PyWin.tar`; on `main`, publishes release `v<ass.py version>.<n>` when the bundle's app/data files changed (`scripts/next_release.py`) |
-| `pages.yml` (web) | push/PR touching the web files; manual | eslint + tsc (Node container), ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`), verified Pyodide download, site build with the latest snapshots, `StackImages-web.zip` of the site; deploys on `main`, then publishes the zip as a `web-*` release when the site's contents changed |
+| `pages.yml` (web) | push/PR touching the web files; manual | eslint + tsc (Node container), ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`), verified Pyodide download, site build with the latest snapshots, `StackImages-web.zip` of the site and `HRDiagram-web.zip` of the HR page; deploys on `main`, then publishes each zip whose contents changed as a release (`web-*`, `hrdiagram-*`) |
 | `snapshots.yml` | manual only | Fetches ~75 clusters (`scripts/build_snapshots.py`: GAVO in pieces, ESA as fallback, lower magnitude limit if both fail), validates, publishes a `snapshots-*` release, redeploys the page. Resumes from the last release; re-run to fill gaps |
 
 Nothing generated is committed: Pyodide (`build/vendor/`), the site (`_site/`) and
@@ -331,7 +331,7 @@ kept as a `web-YYYYMMDD-HHMM` release, never marked Latest. A new release is mad
 when the site's contents change: `zip_site.py --fingerprint` hashes the zip without the
 build time. Unzipped, it is a
 `StackImages/` folder: the home page, `ShowClusters/` with Pyodide and the saved
-snapshots, and `HOSTING.txt` with these instructions. Copy the folder unchanged into
+snapshots, `HRDiagram/`, and `HOSTING.txt` with these instructions. Copy the folder unchanged into
 any directory of a static web site. All links are relative, so it works from a
 subdirectory such as `/~rvdb/StackImages/`.
 
