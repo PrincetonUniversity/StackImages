@@ -78,11 +78,11 @@ math changed; update `web/showclusters.py` to match and the test tells you when 
 | Desktop app | Web page | Why |
 |---|---|---|
 | 4000 × 4000 picture | 1200 × 1200 (same star positions and counts) | ~240 MB arrays are too heavy for a browser tab |
-| "Show Stars" silently resets the magnitude type to Apparent, but the dropdown can still say Absolute | The dropdown visibly switches to Apparent | Same rule, without the hidden state |
+| "Show Stars" silently resets the magnitude type to Apparent (to absolute magnitudes above 5°), but the dropdown can still say otherwise | The dropdown visibly switches to Apparent, or to Absolute above 5° | Same rule, without the hidden state. Above 5° `ass.py` sets an internal `'Abs'` that plots absolute magnitudes but skips Absolute's removal of the brightest point; choosing Absolute in either app gives the same diagram |
 | Repeated "HR Diagram" clicks in Absolute mode keep editing the stored arrays (removing another star each time) | Every diagram is computed fresh | Repeatable results |
 | Plot title accumulates names (`M13, M44`) within one session | Title is the current object | Clarity |
 | 3D, "future" and Color Diagram options | Not included | Not used by HW #7 |
-| FOV up to any value | 0.01–5°, magnitude 4.5–21 | Browser memory; the desktop changes behaviour above 5° |
+| FOV up to any value | 0.01–90°, magnitude 4.5–21; live data for fields wider than ~1.3° only up to magnitude 8.5 (deeper wide fields need an ESA file) | Beyond ~90° the tangent-plane picture breaks down; GAVO can't send wide, deep fields in time (below) |
 | "Save Figure" | "Download HR diagram" / "Download picture" | Browser equivalent |
 | Picture in its own window, sliders under it | Picture sized to the screen with the sliders beside it (or below on narrow screens), plus a **full screen** icon (⤢) on the picture's corner (black surround, dark controls; Esc or ✕ to exit) and **Reset sliders** set apart below the downloads, which asks before discarding moved sliders | Picture and sliders are always visible together; Reset restores the starting stretch without being hit by accident; full screen gives the picture the whole screen |
 
@@ -134,6 +134,7 @@ So the page:
    to 2026-11-03, the pieces of a split came one after another, which made crowded fields very slow.
 3. **Splits a piece that times out** into four smaller ones, down to 0.05°; if even those time
    out, it says the field has too many stars and suggests a smaller FOV or magnitude limit.
+   A field that would need more than 64 pieces (a 5° field needs 36) isn't attempted (see below).
 4. **Reassembles** the pieces into exactly the one-query result: stars seen in two overlapping
    pieces are kept once, the result is trimmed to the query's circle and magnitude limit (using
    the centre and radius exactly as written in the query), and stars are put in a fixed order.
@@ -150,6 +151,31 @@ and a clock: "*N* s so far. Please keep this tab open; crowded parts of the Milk
 minute or two." Only the status line (which changes when a part arrives) is read by screen readers.
 When pieces have been split, the status line says so. The page gives up after 3 minutes and
 falls back to a saved copy or an ESA file. M23 at FOV 2 took 139 s on 2026-11-03.
+
+### Wide fields (constellations)
+
+Pieces don't scale to constellation-sized fields: Orion at FOV 60 would need several thousand.
+But with a bright limit, the opposite trick works: GAVO's magnitude index (the plain condition,
+without `+ 0`) starts from the brightest stars in the sky, and answers the whole circle at once.
+Measured on 2026-11-07, centred on Orion:
+
+| Field | Magnitude index, one query | `+ 0`, one query |
+|---|---|---|
+| FOV 60, G < 7 (HW Problem 1) | 3,285 stars, 2 s | timed out |
+| FOV 60, G < 8 | 9,503 stars, 3 s | |
+| FOV 60, G < 8.5 | 16,274 stars, 2 s | |
+| FOV 60, G < 9 | timed out (28 s); 22 s near the Galactic centre | |
+| FOV 45, G < 10 | timed out | |
+| FOV 30, G < 12 | timed out | timed out even at FOV ~7 |
+
+So a field wider than one piece with Maximum Magnitude **8.5 or less** is sent as one
+magnitude-index query (not split if it times out). A wider field with a deeper limit that would
+need more than 64 pieces is not sent at all: the page says at once that wide fields come from
+the live source only up to magnitude 8.5, and opens the ESA download (the archive's
+asynchronous jobs have no 20 s limit). ESA counted 44,639 stars for FOV 45, G < 10 and 123,711
+for FOV 30, G < 12, centred on Orion; as CSV with the page's query columns those are about 8 and
+21 MB, well inside the 50 MB upload limit (which matches the 300,000-star limit: ~50 MB of CSV,
+~30 MB VOTable, ~23 MB FITS).
 
 ## Downloads
 
@@ -197,6 +223,8 @@ Classroom use fits the non-commercial Gaia licence. The credit text lives in
 | Check | Result |
 |---|---|
 | Port vs original `ass.py` on identical Gaia data (M13, 0.2°, mag 16) | Identical: 1,369 stars, brightest 11.36, same picture and HR points |
+| Port vs original `ass.py` on identical Gaia data (Orion, 60°, mag 7, centred on Alnilam) | Identical stars, picture and HR points |
+| GAVO vs ESA, Orion, 60°, mag 7 | Identical: 3,259 rows |
 | GAVO vs ESA, M13, 0.2°, mag 16 | Identical: 1,498 rows → 1,369 plotted |
 | GAVO vs ESA, M13, 0.2°, mag 18 (HW #7 Problem 1) | Identical: 6,771 rows → 4,588 plotted, brightest 11.36 |
 | GAVO vs ESA, M13, 0.3°, mag 16 (the page's defaults) | Identical: 1,609 rows → 1,472 plotted, brightest 10.34 |
@@ -398,6 +426,7 @@ them.
 |---|---|
 | "The live Gaia data source is unavailable…" | GAVO is down or slow. Saved copies cover common clusters; otherwise use an ESA file (bottom of the page). |
 | "This field has too many stars for the live data source…" | A wide or Milky-Way-dense field even GAVO's smallest pieces can't answer in time. Lower the FOV or Maximum Magnitude, or use an ESA file. |
+| "Wide fields come from the live data source only up to Maximum Magnitude 8.5…" | A wide field with a deep limit (e.g. FOV 45, magnitude 10). Download it from the ESA Gaia archive with the query shown, and choose the file at the bottom of the page. |
 | Page stuck on "Loading Python…" | First visit downloads ~35 MB. On failure, "Reload tool" appears with details. |
 | "The Python worker stopped" | Browser ran out of memory; use a smaller field or magnitude limit. |
 | `pages.yml` warns "No snapshots-* release yet" | Run `snapshots.yml` once (Actions → Snapshots → Run workflow). |

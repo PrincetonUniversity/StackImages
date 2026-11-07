@@ -252,7 +252,7 @@ def test_custom_field_has_a_blank_object_name(session: sc.Session) -> None:
     "text",
     [
         FIELD_LINE.replace("+16 : 41 : 42", "+25 : 00 : 00"),  # RA out of range
-        FIELD_LINE.replace("(FOV)=0.2", "(FOV)=9"),  # FOV out of range
+        FIELD_LINE.replace("(FOV)=0.2", "(FOV)=91"),  # FOV out of range
         FIELD_LINE.replace("=M13", "=andromeda"),  # not a catalog name
         FIELD_LINE.replace("Maximum Magnitude", "Max Mag"),  # wrong label
         FIELD_LINE.rsplit("; ", 1)[0],  # missing value

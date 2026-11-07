@@ -2,7 +2,8 @@
 
 Runs in the desktop container (wxPython, astroquery, Xvfb). The original functions are
 called unmodified; only their GUI widgets and the Gaia network call are replaced with
-fakes that return a recorded ESA result for M13 (0.2°, magnitude < 16).
+fakes that return a recorded ESA result: M13 (0.2°, magnitude < 16), and Orion (60°,
+magnitude < 7, the wide-field homework) centred on Alnilam, whose coordinates students type.
 If Bob changes the math in ass.py, these tests fail and the port must be updated.
 """
 
@@ -19,8 +20,12 @@ import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURE = ROOT / "tests" / "web" / "fixtures" / "m13_esa.vot"
-FOV, MAXMAG = 0.2, 16.0
+FIXTURES = ROOT / "tests" / "web" / "fixtures"
+# name: (recorded ESA result, RA and Dec as typed or None to look up the name, FOV, magnitude)
+CASES = {
+    "m13": (FIXTURES / "m13_esa.vot", None, 0.2, 16.0),
+    "orion60": (FIXTURES / "orion60_esa.vot", ("+05 : 36 : 13", "-01 : 12 : 07"), 60.0, 7.0),
+}
 
 sys.path.insert(0, str(ROOT / "web"))
 sys.path.insert(0, str(ROOT))
@@ -45,9 +50,10 @@ class Widget:
         self.enabled = True
 
 
-@pytest.fixture(scope="module")
-def original() -> SimpleNamespace:
-    """Run ass.py's Show Stars on the recorded M13 result; capture what it produces."""
+@pytest.fixture(scope="module", params=list(CASES))
+def original(request: pytest.FixtureRequest) -> SimpleNamespace:
+    """Run ass.py's Show Stars on a recorded ESA result; capture what it produces."""
+    fixture, typed, fov, maxmag = CASES[request.param]
     from astropy.table import Table
 
     os.chdir(ROOT)  # ass.py opens csv/ and fit/ relative to the working directory
@@ -55,7 +61,7 @@ def original() -> SimpleNamespace:
 
     ass: Any = importlib.import_module("ass")  # Bob's module; not type-checked
 
-    table = Table.read(FIXTURE, format="votable")
+    table = Table.read(fixture, format="votable")
     queries: list[str] = []
 
     def fake_launch(query: str, *args: Any, **kwargs: Any) -> SimpleNamespace:
@@ -63,13 +69,15 @@ def original() -> SimpleNamespace:
         return SimpleNamespace(get_results=lambda: table)
 
     Gaia.launch_job_async = fake_launch  # type: ignore[method-assign]
-    position = ass.getRaDec("m13")
+    if typed is None:
+        position = ass.getRaDec(request.param)
+        typed = (ass.decimal_to_min_sec(position[0]), ass.decimal_to_min_sec(position[1]))
     widgets = {
         "objectid": Widget(""),
-        "objectra": Widget(ass.decimal_to_min_sec(position[0])),
-        "objectdec": Widget(ass.decimal_to_min_sec(position[1])),
-        "objectfov": Widget(str(FOV)),
-        "objectmaxmag": Widget(str(MAXMAG)),
+        "objectra": Widget(typed[0]),
+        "objectdec": Widget(typed[1]),
+        "objectfov": Widget(str(fov)),
+        "objectmaxmag": Widget(str(maxmag)),
         "objectdt": Widget("0.0"),
         "lbl4": Widget(),
         "lbl10": Widget(),
@@ -83,14 +91,18 @@ def original() -> SimpleNamespace:
     ass.suptitle = lambda *a, **k: None
     ass.close = lambda *a, **k: None
     ass.image_type = "2D"
-    ass.objname = "M13"
+    ass.objname = request.param
 
     ass.show_gaia_image(None)
 
     return SimpleNamespace(
         ass=ass,
         query=queries[0],
-        position=position,
+        typed=typed,
+        fixture=fixture,
+        fov=fov,
+        maxmag=maxmag,
+        magnitude_type=ass.abs_vs_app,
         stars={k: np.array(getattr(ass, k)) for k in ("ra", "dec", "mag", "absmag", "coloridx")},
         count_label=widgets["lbl4"].label,
         brightest_label=widgets["lbl10"].label,
@@ -102,12 +114,12 @@ def original() -> SimpleNamespace:
 def port(original: SimpleNamespace) -> SimpleNamespace:
     import showclusters as sc
 
-    ra_mid = sc.parse_sexagesimal(original.ass.decimal_to_min_sec(original.position[0]))
-    dec_mid = sc.parse_sexagesimal(original.ass.decimal_to_min_sec(original.position[1]))
-    gaia = sc.parse_gaia_table(FIXTURE.read_bytes(), FIXTURE.name)
+    ra_mid = sc.parse_sexagesimal(original.typed[0])
+    dec_mid = sc.parse_sexagesimal(original.typed[1])
+    gaia = sc.parse_gaia_table(original.fixture.read_bytes(), original.fixture.name)
     bright = np.array(sc.bright_star_rows(ROOT / "csv" / "hygdata_v3.csv"))
-    stars = sc.select_stars(gaia, bright, ra_mid, dec_mid, FOV)
-    frame = sc.frame_stars(stars, ra_mid, dec_mid, FOV)
+    stars = sc.select_stars(gaia, bright, ra_mid, dec_mid, original.fov)
+    frame = sc.frame_stars(stars, ra_mid, dec_mid, original.fov)
     return SimpleNamespace(sc=sc, ra_mid=ra_mid, dec_mid=dec_mid, frame=frame)
 
 
@@ -127,7 +139,7 @@ def test_sexagesimal_round_trip_matches(original: SimpleNamespace, port: SimpleN
 
 
 def test_query_is_identical(original: SimpleNamespace, port: SimpleNamespace) -> None:
-    ours = port.sc.gaia_adql(port.ra_mid, port.dec_mid, FOV, MAXMAG, "esa")
+    ours = port.sc.gaia_adql(port.ra_mid, port.dec_mid, original.fov, original.maxmag, "esa")
     assert " ".join(ours.split()) == " ".join(original.query.split())
 
 
@@ -139,6 +151,11 @@ def test_same_stars_in_same_order(original: SimpleNamespace, port: SimpleNamespa
     finite = np.isfinite(original.stars["absmag"])
     np.testing.assert_array_equal(np.isfinite(ours.absmag), finite)
     np.testing.assert_allclose(ours.absmag[finite], original.stars["absmag"][finite], rtol=1e-5)
+
+
+def test_show_stars_magnitude_type(original: SimpleNamespace) -> None:
+    """ass.py picks absolute magnitudes above 5° (its 'Abs'); the page shows that as Absolute."""
+    assert original.magnitude_type == ("Abs" if original.fov > 5 else "Apparent")
 
 
 def test_star_count_and_brightest_labels(original: SimpleNamespace, port: SimpleNamespace) -> None:

@@ -21,7 +21,8 @@ import numpy as np
 
 # --- Limits for user input (validated before anything else runs) -------------------
 
-FOV_RANGE = (0.01, 5.0)  # degrees; ass.py switches to a different mode above 5
+FOV_RANGE = (0.01, 90.0)  # degrees; ass.py has no cap; the tangent-plane picture holds to ~90°
+WIDE_FOV = 5.0  # ass.py: above this, Show Stars sets the HR diagram to absolute magnitudes
 MAXMAG_RANGE = (4.5, 21.0)  # Gaia G; ass.py drops stars brighter than 4.5
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_ROWS = 300_000
@@ -124,8 +125,14 @@ def gaia_adql(ra_hours: float, dec_deg: float, fov: float, maxmag: float, servic
     return circle_adql(ra_hours * 15, dec_deg, fov / math.sqrt(2), maxmag, service)
 
 
-def circle_adql(ra_deg: float, dec_deg: float, radius: float, maxmag: float, service: str) -> str:
-    """Stars brighter than maxmag within `radius` degrees of (ra_deg, dec_deg)."""
+def circle_adql(
+    ra_deg: float, dec_deg: float, radius: float, maxmag: float, service: str, magnitude_index: bool = False
+) -> str:
+    """Stars brighter than maxmag within `radius` degrees of (ra_deg, dec_deg).
+
+    For GAVO, `magnitude_index` lets its database start from the brightest stars in the sky,
+    which is what answers a wide field with a bright limit quickly.
+    """
     circle = f"WHERE DISTANCE({ra_deg:14f}, {dec_deg:14f}, gaia.ra, gaia.dec) < {radius:14f} "
     if service == "esa":
         return (
@@ -137,10 +144,11 @@ def circle_adql(ra_deg: float, dec_deg: float, radius: float, maxmag: float, ser
         # "+ 0" selects the same stars but keeps GAVO's database off its magnitude index:
         # in dense Milky Way fields (M23, M22) it otherwise scans every bright star in the
         # sky and hits the 20 s limit, where the position index answers in seconds.
+        mag = "gaia.phot_g_mean_mag" if magnitude_index else "gaia.phot_g_mean_mag + 0"
         return (
             "SELECT gaia.ra, gaia.dec, gaia.parallax, gaia.phot_g_mean_mag, "
             "gaia.phot_bp_mean_mag, gaia.phot_rp_mean_mag, gaia.pmra, gaia.pmdec "
-            "FROM gaia.dr3lite AS gaia " + circle + f"AND gaia.phot_g_mean_mag + 0 < {maxmag:5f} "
+            "FROM gaia.dr3lite AS gaia " + circle + f"AND {mag} < {maxmag:5f} "
         )
     raise ValueError(f"unknown service {service!r}")
 
@@ -151,6 +159,12 @@ def circle_adql(ra_deg: float, dec_deg: float, radius: float, maxmag: float, ser
 # fields need ~0.2°. So a large field is covered by smaller circles, split again on timeout.
 
 TILE_RADIUS = 0.9  # degrees; first-pass piece size
+# Wide fields (measured 2026-11-07, Orion, 60°): pieces would take thousands of queries, but
+# GAVO's magnitude index answers G < 8.5 over the whole circle in ~2 s (16,274 stars); G < 9
+# takes 20+ s or times out. Deeper wide fields need more pieces than the page can fetch in
+# time (a 5° field takes 36), so the page points to an ESA download instead.
+WIDE_MAXMAG = 8.5
+MAX_TILES = 64
 MIN_TILE_RADIUS = 0.05  # degrees; below this, give up (the field is simply too dense)
 _MARGIN = 1.02  # covers the small distortion between tangent-plane squares and sky circles
 
@@ -185,9 +199,23 @@ def _tile(field: dict[str, Any], xi: float, eta: float, half: float) -> dict[str
 def field_tiles(
     ra_hours: float, dec_deg: float, fov: float, maxmag: float, service: str, max_radius: float = TILE_RADIUS
 ) -> list[dict[str, Any]]:
-    """Queries that together cover the field's query circle (one query if it is small)."""
+    """Queries that together cover the field's query circle (one query if it is small).
+
+    [] means the field is too wide and deep to fetch from GAVO in time.
+    """
     validate_query(ra_hours, dec_deg, fov, maxmag)
     radius = fov / math.sqrt(2)
+    if radius > max_radius and maxmag <= WIDE_MAXMAG:
+        return [
+            {
+                "xi": 0.0,
+                "eta": 0.0,
+                "half": radius,
+                "radius": radius,
+                "magnitude_index": True,  # not split: smaller pieces only make it slower
+                "query": circle_adql(ra_hours * 15, dec_deg, radius, maxmag, service, magnitude_index=True),
+            }
+        ]
     if radius <= max_radius:
         # One query. Its square (used only if it must be split) encloses the whole circle.
         return [
@@ -214,13 +242,15 @@ def field_tiles(
             dy = max(abs(eta) - side / 2, 0)
             if math.hypot(dx, dy) < radius:
                 tiles.append(_tile(field, xi, eta, side / 2))
-    return tiles
+    return tiles if len(tiles) <= MAX_TILES else []
 
 
 def split_tile(
     tile: dict[str, Any], ra_hours: float, dec_deg: float, maxmag: float, service: str
 ) -> list[dict[str, Any]]:
     """Four smaller queries covering a piece that timed out; [] if it is already minimal."""
+    if tile.get("magnitude_index"):
+        return []
     half = tile["half"] / 2
     if half * math.sqrt(2) * _MARGIN < MIN_TILE_RADIUS:
         return []
@@ -945,6 +975,7 @@ class Session:
             "gavo": gaia_adql(ra, dec, fov, maxmag, "gavo"),
             "gavo_tiles": field_tiles(ra, dec, fov, maxmag, "gavo"),
             "esa": gaia_adql(ra, dec, fov, maxmag, "esa"),
+            "wide_maxmag": WIDE_MAXMAG,
         }
 
     def split(self, tile: Any) -> list[dict[str, Any]]:
@@ -1010,6 +1041,8 @@ class Session:
             "pct_lo": pct_lo,
             "pct_hi": pct_hi,
             "image": base.tobytes(),
+            # ass.py's Show Stars resets the magnitude type, to absolute above WIDE_FOV
+            "magnitude_type": "Absolute" if fov > WIDE_FOV else "Apparent",
         }
 
     def star_data(self, date: str, display: str = "") -> dict[str, Any]:
