@@ -82,7 +82,7 @@ math changed; update `web/showclusters.py` to match and the test tells you when 
 | Repeated "HR Diagram" clicks in Absolute mode keep editing the stored arrays (removing another star each time) | Every diagram is computed fresh | Repeatable results |
 | Plot title accumulates names (`M13, M44`) within one session | Title is the current object | Clarity |
 | 3D, "future" and Color Diagram options | Not included | Not used by HW #7 |
-| FOV up to any value | 0.01–90°, magnitude 4.5–21; live data for fields wider than ~1.3° only up to magnitude 8.5 (deeper wide fields need an ESA file) | Beyond ~90° the tangent-plane picture breaks down; GAVO can't send wide, deep fields in time (below) |
+| FOV up to any value | 0.01–90°, magnitude 4.5–21; wide, deep fields take a few minutes (one GAVO async job) | Beyond ~90° the tangent-plane picture breaks down; GAVO's quick endpoint can't send wide, deep fields in time (below) |
 | "Save Figure" | "Download HR diagram" / "Download picture" | Browser equivalent |
 | Picture in its own window, sliders under it | Picture sized to the screen with the sliders beside it (or below on narrow screens), plus a **full screen** icon (⤢) on the picture's corner (black surround, dark controls; Esc or ✕ to exit) and **Reset sliders** set apart below the downloads, which asks before discarding moved sliders | Picture and sliders are always visible together; Reset restores the starting stretch without being hit by accident; full screen gives the picture the whole screen |
 
@@ -169,13 +169,28 @@ Measured on 2026-11-07, centred on Orion:
 | FOV 30, G < 12 | timed out | timed out even at FOV ~7 |
 
 So a field wider than one piece with Maximum Magnitude **8.5 or less** is sent as one
-magnitude-index query (not split if it times out). A wider field with a deeper limit that would
-need more than 64 pieces is not sent at all: the page says at once that wide fields come from
-the live source only up to magnitude 8.5, and opens the ESA download (the archive's
-asynchronous jobs have no 20 s limit). ESA counted 44,639 stars for FOV 45, G < 10 and 123,711
-for FOV 30, G < 12, centred on Orion; as CSV with the page's query columns those are about 8 and
-21 MB, well inside the 50 MB upload limit (which matches the 300,000-star limit: ~50 MB of CSV,
-~30 MB VOTable, ~23 MB FITS).
+magnitude-index query (not split if it times out).
+
+A wider field with a deeper limit, one that would need more than 64 pieces, goes to GAVO's
+**asynchronous** service (`dc.g-vo.org/tap/async`) as one job: no 20 s limit (jobs may run two
+hours), and it allows the page to read its answers, as the quick endpoint does. The page creates
+the job (GAVO redirects to it; the job's document names it), starts it, checks its phase every
+3 s, downloads the CSV, and deletes the job whatever happens. It gives up after 15 minutes. A
+progress bar and clock show it working. Measured on 2026-11-07, centred on Orion:
+
+| Field | Async job | Stars | In the page (Chromium) |
+|---|---|---|---|
+| FOV 45, G < 10 | 112 s (224 s on a second run, from the page itself) | 44,735 (4.3 MB) | 27,503 plotted, < 1 s; HR diagram 0.9 s |
+| FOV 30, G < 12 | 279 s | 120,593 (11.8 MB) | 70,054 plotted, 0.9 s; HR diagram 1.0 s |
+
+The 45/10 field from the page matched an ESA download exactly (27,503 plotted). If a job fails,
+the page explains and opens the ESA download.
+
+**ESA downloads stop at 50,000 stars** for users who aren't logged in. FOV 30, G < 12 came back
+as exactly 50,000 of about 120,000, marked `OVERFLOW` in a VOTable but with no sign in CSV;
+asking for more ran 16 minutes and was aborted with 106,497 rows. So an uploaded file with
+exactly 50,000 stars, or a VOTable marked `OVERFLOW`, is refused as incomplete. Otherwise the
+50 MB upload limit matches the 300,000-star limit (~50 MB of CSV, ~30 MB VOTable, ~23 MB FITS).
 
 ## Downloads
 
@@ -411,10 +426,13 @@ them.
 
 - Inputs are validated before any query: object names must look like `m13`, `ngc5466` or
   `ic4665`; RA/Dec, FOV and magnitude must be in range. Queries are built from numbers only.
-- Uploads: at most 50 MB and 300,000 stars, with the required Gaia columns; anything else is
+- Uploads: at most 50 MB and 300,000 stars, with the required Gaia columns; ESA results cut off
+  at 50,000 stars (or marked `OVERFLOW`) are refused as incomplete; anything else is
   rejected with a message naming the problem. A file centred on a different object is
   rejected or flagged.
-- The only outside service Show Clusters contacts is GAVO; the browser tests enforce this.
+- The only outside service Show Clusters contacts is GAVO (its quick and asynchronous TAP
+  endpoints); the browser tests enforce this. The page only follows async jobs on GAVO's own job
+  list, named by an ID of letters, digits, `-` and `_`.
 - HR Diagram of Your Own Image contacts no outside service, and the student's image never
   leaves the browser. It refuses files over 250 MB or 20 megapixels, non-FITS files, images with
   NaN or infinite pixels, and impossible magnitudes, with a message naming the problem.
@@ -426,7 +444,9 @@ them.
 |---|---|
 | "The live Gaia data source is unavailable…" | GAVO is down or slow. Saved copies cover common clusters; otherwise use an ESA file (bottom of the page). |
 | "This field has too many stars for the live data source…" | A wide or Milky-Way-dense field even GAVO's smallest pieces can't answer in time. Lower the FOV or Maximum Magnitude, or use an ESA file. |
-| "Wide fields come from the live data source only up to Maximum Magnitude 8.5…" | A wide field with a deep limit (e.g. FOV 45, magnitude 10). Download it from the ESA Gaia archive with the query shown, and choose the file at the bottom of the page. |
+| "Gaia is preparing the stars for this wide field…" | A wide field with a deep limit (e.g. FOV 45, magnitude 10) is one GAVO async job; it takes a few minutes. Keep the tab open. |
+| "The live data source couldn't prepare this wide field…" | The async job failed or took over 15 minutes. Try again, or download from the ESA Gaia archive (no more than 50,000 stars unless logged in). |
+| "…exactly 50,000 stars…" / "…marked this file as incomplete…" | ESA cut the download off. Click Show Stars to get the field live instead, or use a smaller field or magnitude limit. |
 | Page stuck on "Loading Python…" | First visit downloads ~35 MB. On failure, "Reload tool" appears with details. |
 | "The Python worker stopped" | Browser ran out of memory; use a smaller field or magnitude limit. |
 | `pages.yml` warns "No snapshots-* release yet" | Run `snapshots.yml` once (Actions → Snapshots → Run workflow). |

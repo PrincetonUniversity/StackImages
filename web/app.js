@@ -11,6 +11,12 @@ const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const GAVO_TIMEOUT_MS = 60000; // per request; GAVO itself gives up after ~20 s
 const GAVO_TOTAL_MS = 180000; // whole field, including splitting
 const GAVO_PARALLEL = 4;
+// Wide, deep fields: one job on GAVO's asynchronous service, which has no 20 s limit.
+// Measured 2026-11-07: Orion FOV 45/G 10 took 112 s, FOV 30/G 12 took 279 s.
+const GAVO_ASYNC = "https://dc.g-vo.org/tap/async";
+const GAVO_JOBS = "https://dc.g-vo.org/__system__/tap/run/async/";
+const GAVO_ASYNC_TOTAL_MS = 15 * 60000;
+const GAVO_POLL_MS = 3000;
 
 /** @template {HTMLElement} T @param {string} id @returns {T} */
 function $(id) {
@@ -217,6 +223,61 @@ class GavoError extends Error {
 class TooDenseError extends Error {}
 
 /**
+ * Fetch a wide, deep field as one job on GAVO's asynchronous service: create it (GAVO answers
+ * with a redirect to the job), start it, check on it every few seconds, download the result,
+ * and delete the job whatever happens. A progress bar and clock show it's working meanwhile.
+ * @param {string} query
+ */
+async function fetchGavoAsync(query) {
+  const started = Date.now();
+  const deadline = started + GAVO_ASYNC_TOTAL_MS;
+  setStatus("Gaia is preparing the stars for this wide field (via GAVO). This usually takes 2 to 5 minutes.");
+  progressBar.removeAttribute("value");
+  const tick = () => {
+    const seconds = Math.floor((Date.now() - started) / 1000);
+    progressText.textContent = `${seconds} s so far. Please keep this tab open; wide, deep fields take a few minutes.`;
+  };
+  tick();
+  progress.hidden = false;
+  const clock = setInterval(tick, 1000);
+  let job = "";
+  try {
+    const body = new URLSearchParams({ REQUEST: "doQuery", LANG: "ADQL", FORMAT: "csv", MAXREC: String(MAX_ROWS), QUERY: query });
+    // GAVO answers with a redirect to the new job, which the browser follows; the job's
+    // document names it. Only ever talk to a job on GAVO's own job list.
+    const created = await fetch(GAVO_ASYNC, { method: "POST", body, signal: AbortSignal.timeout(GAVO_TIMEOUT_MS) });
+    const id = created.ok ? /<uws:jobId>([A-Za-z0-9_-]+)<\/uws:jobId>/.exec(await created.text())?.[1] : undefined;
+    if (!id) throw new GavoError(`GAVO could not start the job (HTTP ${created.status})`, false);
+    job = GAVO_JOBS + id;
+    const run = await fetch(`${job}/phase`, {
+      method: "POST", body: new URLSearchParams({ PHASE: "RUN" }), signal: AbortSignal.timeout(GAVO_TIMEOUT_MS),
+    });
+    if (!run.ok) throw new GavoError(`GAVO could not start the job (HTTP ${run.status})`, false);
+    for (;;) {
+      if (Date.now() > deadline) throw new GavoError("the job took too long", true);
+      const answer = await fetch(`${job}/phase`, { cache: "no-store", signal: AbortSignal.timeout(GAVO_TIMEOUT_MS) });
+      const phase = (await answer.text()).trim();
+      if (phase === "COMPLETED") break;
+      if (phase === "ERROR" || phase === "ABORTED") throw new GavoError(`the job ended with ${phase}`, false);
+      await new Promise((resolve) => setTimeout(resolve, GAVO_POLL_MS));
+    }
+    setStatus("Downloading star data from Gaia (via GAVO)…");
+    const result = await fetch(`${job}/results/result`, { signal: AbortSignal.timeout(GAVO_TIMEOUT_MS) });
+    const type = result.headers.get("content-type") || "";
+    if (!result.ok || !type.includes("csv")) throw new GavoError(`GAVO answered HTTP ${result.status}`, false);
+    return new Uint8Array(await result.arrayBuffer());
+  } finally {
+    clearInterval(clock);
+    progress.hidden = true;
+    if (job) {
+      // Free GAVO's storage; a failure here doesn't matter to the student.
+      await fetch(job, { method: "POST", body: new URLSearchParams({ ACTION: "DELETE" }), signal: AbortSignal.timeout(5000) })
+        .catch(() => undefined);
+    }
+  }
+}
+
+/**
  * Fetch a field as one or more pieces (large fields are split so each answers quickly);
  * a piece that times out is split again. Returns one result per piece.
  * While it runs, a progress bar and a clock show it's working, so nobody gives up on a
@@ -348,17 +409,17 @@ async function onShowStars() {
     let reason = "";
     let dense = false;
     let advice = "";
+    const wide = !plan.gavo_tiles.length; // too wide and deep for quick queries: one async job
     try {
-      // No pieces: too wide and deep for GAVO to send in time, so don't ask it.
-      if (!plan.gavo_tiles.length) throw new TooDenseError(
-        `Wide fields come from the live data source only up to Maximum Magnitude ${plan.wide_maxmag}. ` +
-        "For a deeper field, download the stars from the ESA Gaia archive (below) and choose the file there, " +
-        "or lower the Maximum Magnitude.");
-      parts = await fetchGavoTiles(plan.gavo_tiles);
+      parts = wide ? [await fetchGavoAsync(plan.gavo_async)] : await fetchGavoTiles(plan.gavo_tiles);
     } catch (error) {
       dense = error instanceof TooDenseError || (error instanceof GavoError && error.timedOut);
-      if (error instanceof TooDenseError && !plan.gavo_tiles.length) advice = error.message;
       reason = error instanceof Error && error.name === "TimeoutError" ? "it did not answer in time" : String(error instanceof Error ? error.message : error);
+      if (wide) {
+        advice = `The live data source couldn't prepare this wide field (${reason}). Try again, or download the ` +
+          "stars from the ESA Gaia archive (below) and choose the file there. ESA stops downloads at 50,000 stars " +
+          "unless you are logged in, so a very large field may need a smaller Field of View or a lower Maximum Magnitude.";
+      }
     }
     if (parts) {
       await showStars(parts, "gavo.csv", "Gaia DR3 via GAVO", MAX_ROWS);

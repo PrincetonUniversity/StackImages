@@ -136,10 +136,26 @@ def test_wide_bright_field_is_one_magnitude_index_query(fov: float, maxmag: floa
 
 
 @pytest.mark.parametrize(("fov", "maxmag"), [(45.0, 10.0), (30.0, 12.0), (60.0, 9.0), (20.0, 16.0)])
-def test_wide_deep_field_is_refused_without_queries(fov: float, maxmag: float) -> None:
-    """Too many pieces to fetch in time and too deep for the magnitude index: the page says so
-    at once and points to an ESA download."""
+def test_wide_deep_field_is_one_async_job(session: sc.Session, fov: float, maxmag: float) -> None:
+    """Too many pieces to fetch in time and too deep for the magnitude index's quick answer: the
+    page sends the whole field as one GAVO async job instead (measured 2026-11-07: FOV 45/G 10 in
+    112 s, FOV 30/G 12 in 279 s, 120,593 stars; ESA's anonymous downloads stop at 50,000)."""
     assert sc.field_tiles(*ORION, fov, maxmag, "gavo") == []
+    ra, dec = (sc.format_sexagesimal(v) for v in ORION)
+    plan = session.plan(ra, dec, fov, maxmag)
+    assert plan["gavo_tiles"] == []
+    query = plan["gavo_async"]
+    assert "gaia.dr3lite" in query and "+ 0" not in query and f"< {maxmag:5f}" in query
+    assert f"{fov / math.sqrt(2):14f}".strip() in query
+
+
+@pytest.mark.parametrize(("fov", "maxmag"), [(0.3, 16.0), (5.0, 16.0), (60.0, 7.0)])
+def test_fields_gavo_answers_quickly_need_no_async_job(
+    session: sc.Session, fov: float, maxmag: float
+) -> None:
+    ra, dec = (sc.format_sexagesimal(v) for v in ORION)
+    plan = session.plan(ra, dec, fov, maxmag)
+    assert plan["gavo_tiles"] and plan["gavo_async"] is None
 
 
 def test_largest_field_that_is_still_fetched_in_pieces() -> None:
@@ -268,3 +284,45 @@ def test_narrow_field_starts_with_apparent_magnitudes(session: sc.Session) -> No
         [(FIXTURES / "m13_gavo.csv").read_bytes()], "gavo.csv", "test", RA_TEXT, DEC_TEXT, FOV, MAXMAG, "M13"
     )
     assert result["magnitude_type"] == "Apparent"
+
+
+# --- ESA downloads that stopped early ---------------------------------------------------
+
+
+def m13_rows(n: int) -> bytes:
+    """An ESA-style CSV of n stars inside the M13 field (the fixture's rows, repeated)."""
+    lines = (FIXTURES / "m13_esa.csv").read_text().splitlines()
+    body = [lines[1 + i % (len(lines) - 1)] for i in range(n)]
+    return ("\n".join([lines[0], *body]) + "\n").encode()
+
+
+def test_esa_download_cut_at_50000_stars_is_refused(session: sc.Session) -> None:
+    """ESA stops anonymous results at 50,000 rows without a sign in CSV (measured 2026-11-07:
+    Orion FOV 30/G 12 came back as exactly 50,000 of ~120,000)."""
+    with pytest.raises(sc.InputError, match=r"50,000 stars.*incomplete"):
+        session.show_stars(
+            m13_rows(50_000), "esa.csv", "test", RA_TEXT, DEC_TEXT, FOV, MAXMAG, "M13", 0, True
+        )
+
+
+def test_overflow_flag_in_votable_is_refused(session: sc.Session) -> None:
+    data = (FIXTURES / "m13_esa.vot").read_bytes()
+    marker = b'<RESOURCE type="results">'
+    assert marker in data
+    flagged = data.replace(marker, marker + b'\n<INFO name="QUERY_STATUS" value="OVERFLOW"/>', 1)
+    with pytest.raises(sc.InputError, match="incomplete"):
+        session.show_stars(flagged, "esa.vot", "test", RA_TEXT, DEC_TEXT, FOV, MAXMAG, "M13", 0, True)
+
+
+@pytest.mark.parametrize("n", [49_999, 50_001])
+def test_other_large_uploads_are_accepted(session: sc.Session, n: int) -> None:
+    result = session.show_stars(
+        m13_rows(n), "esa.csv", "test", RA_TEXT, DEC_TEXT, FOV, MAXMAG, "M13", 0, True
+    )
+    assert result["rows"] == n
+
+
+def test_gavo_results_of_50000_rows_are_not_refused(session: sc.Session) -> None:
+    """Only a student's ESA file is checked; a GAVO piece can hold exactly 50,000 stars."""
+    result = session.show_stars([m13_rows(50_000)], "gavo.csv", "test", RA_TEXT, DEC_TEXT, FOV, MAXMAG, "M13")
+    assert result["rows"] == 50_000
