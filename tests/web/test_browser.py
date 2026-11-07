@@ -159,6 +159,7 @@ def test_homework_flow_with_live_gavo(browser, sites) -> None:  # type: ignore[n
     assert page.text_content("#brightest") == "11.36"
     assert page.text_content("#source") == "Gaia DR3 via GAVO"
     assert len(requests) == 1
+    assert page.input_value("#magtype") == "Apparent"
     query = requests[0]["QUERY"][0]
     assert "gaia.dr3lite" in query and "250.425000" in query and "< 16.000000" in query
     assert requests[0]["MAXREC"] == ["300000"]
@@ -191,6 +192,52 @@ def test_homework_flow_with_live_gavo(browser, sites) -> None:  # type: ignore[n
         page.click("#sky-download")
     assert Path(info.value.path()).read_bytes()[:4] == b"\x89PNG"
     assert page.errors == []  # type: ignore[attr-defined]
+    page.close()
+
+
+def enter_orion(page, fov: str, maxmag: str) -> None:  # type: ignore[no-untyped-def]
+    """Homework: Orion isn't a catalog object, so students type its coordinates."""
+    page.fill("#ra", "+05 : 36 : 13")
+    page.fill("#dec", "-01 : 12 : 07")
+    page.fill("#fov", fov)
+    page.fill("#maxmag", maxmag)
+
+
+def test_orion_at_60_degrees(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    requests: list[dict[str, list[str]]] = []
+    body = (FIXTURES / "orion60_gavo.csv").read_bytes()
+
+    def handle(route) -> None:  # type: ignore[no-untyped-def]
+        requests.append(parse_qs(route.request.post_data or ""))
+        route.fulfill(
+            status=200, body=body, headers={"content-type": "text/csv", "access-control-allow-origin": "*"}
+        )
+
+    page = open_page(browser, sites["without"], handle)
+    enter_orion(page, "60", "7")
+    page.click("#show-stars")
+    page.wait_for_function("!document.getElementById('stars-content').hidden", timeout=60_000)
+    assert len(requests) == 1  # one magnitude-index query, not thousands of pieces
+    query = requests[0]["QUERY"][0]
+    assert "42.426407" in query and "+ 0" not in query and "< 7.000000" in query
+    assert int((page.text_content("#count") or "0").replace(",", "")) > 2000
+    assert page.input_value("#magtype") == "Absolute"  # as ass.py does above 5°
+    assert 0.001 < canvas_lit_fraction(page) < 0.6
+    assert page.errors == []  # type: ignore[attr-defined]
+    page.close()
+
+
+def test_wide_deep_field_points_to_esa_without_asking_gavo(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    requests: list[dict[str, list[str]]] = []
+    page = open_page(browser, sites["without"], gavo_ok(requests))
+    enter_orion(page, "45", "10")
+    page.click("#show-stars")
+    page.wait_for_selector("#error:not([hidden])")
+    error = page.text_content("#error") or ""
+    assert "Maximum Magnitude 8.5" in error and "ESA" in error, error
+    assert requests == []
+    assert page.evaluate("document.getElementById('upload').open") is True
+    assert "< 10.000000" in (page.text_content("#adql") or "")  # the query to paste into ESA
     page.close()
 
 
@@ -353,7 +400,7 @@ def test_bad_inputs_show_messages(browser, sites, tmp_path: Path) -> None:  # ty
     assert "Messier, NGC or IC" in page.text_content("#error")
 
     enter_m13(page)
-    page.fill("#fov", "9")
+    page.fill("#fov", "91")
     page.click("#show-stars")
     page.wait_for_function("document.getElementById('error').textContent.includes('Field of view')")
 

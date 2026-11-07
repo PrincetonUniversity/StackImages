@@ -347,10 +347,17 @@ async function onShowStars() {
     let parts;
     let reason = "";
     let dense = false;
+    let advice = "";
     try {
+      // No pieces: too wide and deep for GAVO to send in time, so don't ask it.
+      if (!plan.gavo_tiles.length) throw new TooDenseError(
+        `Wide fields come from the live data source only up to Maximum Magnitude ${plan.wide_maxmag}. ` +
+        "For a deeper field, download the stars from the ESA Gaia archive (below) and choose the file there, " +
+        "or lower the Maximum Magnitude.");
       parts = await fetchGavoTiles(plan.gavo_tiles);
     } catch (error) {
       dense = error instanceof TooDenseError || (error instanceof GavoError && error.timedOut);
+      if (error instanceof TooDenseError && !plan.gavo_tiles.length) advice = error.message;
       reason = error instanceof Error && error.name === "TimeoutError" ? "it did not answer in time" : String(error instanceof Error ? error.message : error);
     }
     if (parts) {
@@ -364,12 +371,12 @@ async function onShowStars() {
       return;
     }
     uploadDetails.open = true;
-    showError(dense
+    showError(advice || (dense
       ? "This field has too many stars for the live data source to send in time (it is wide or in a dense part " +
         "of the Milky Way). Use a smaller Field of View or a lower Maximum Magnitude, or a file from the ESA " +
         "Gaia archive (below)."
       : `The live Gaia data source is unavailable (${reason}), and no saved copy covers this field. ` +
-        "Try again in a few minutes, or use a file from the ESA Gaia archive (below).");
+        "Try again in a few minutes, or use a file from the ESA Gaia archive (below)."));
     setStatus("No star data.");
   } catch (error) {
     report(error, "Show Stars failed");
@@ -457,7 +464,7 @@ function displayStars(result, source) {
     }
     notes.append(Object.assign(document.createElement("li"), { textContent: "Picture settings restored from the file." }));
   }
-  magtype.value = "Apparent"; // ass.py resets the magnitude type on Show Stars
+  magtype.value = result.magnitude_type; // ass.py resets it on Show Stars: Absolute for wide fields
   hrImage.hidden = true;
   hrDownloads.hidden = true;
   hrCredit.hidden = true;

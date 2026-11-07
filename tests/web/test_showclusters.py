@@ -84,7 +84,7 @@ def test_sexagesimal_rejects_bad_text(text: str) -> None:
         (-1, 0, 0.3, 16, "Right ascension"),
         (1, 91, 0.3, 16, "Declination"),
         (1, 0, 0.0, 16, "Field of view"),
-        (1, 0, 6.0, 16, "Field of view"),
+        (1, 0, 91.0, 16, "Field of view"),
         (1, 0, 0.3, 22, "Maximum magnitude"),
         (1, 0, 0.3, 3, "Maximum magnitude"),
         (float("nan"), 0, 0.3, 16, "numbers"),
@@ -94,6 +94,12 @@ def test_sexagesimal_rejects_bad_text(text: str) -> None:
 def test_query_inputs_are_validated(ra: float, dec: float, fov: float, maxmag: float, message: str) -> None:
     with pytest.raises(sc.InputError, match=message):
         sc.gaia_adql(ra, dec, fov, maxmag, "gavo")
+
+
+@pytest.mark.parametrize("fov", [5.0, 6.0, 60.0, 90.0])
+def test_wide_fields_are_accepted(fov: float) -> None:
+    """The desktop app has no cap; 90° is where the tangent-plane picture still holds."""
+    assert "DISTANCE" in sc.gaia_adql(5.6, -1.2, fov, 7, "esa")
 
 
 def test_adql_for_both_services() -> None:

@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+FIXTURES = Path(__file__).parent / "fixtures"
 sys.path.insert(0, str(ROOT / "web"))
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -118,6 +119,40 @@ def test_splitting_stops_at_the_minimum_size() -> None:
     assert tile["radius"] >= sc.MIN_TILE_RADIUS and depth >= 1
 
 
+ORION = (5.6036, -1.2019)  # Alnilam, the middle of Orion's belt (HW: FOV 60, magnitude 7)
+
+
+@pytest.mark.parametrize(("fov", "maxmag"), [(60.0, 7.0), (60.0, sc.WIDE_MAXMAG), (90.0, 6.0), (8.0, 8.0)])
+def test_wide_bright_field_is_one_magnitude_index_query(fov: float, maxmag: float) -> None:
+    """GAVO answers 60° at G < 8.5 in ~2 s through its magnitude index (measured 2026-11-07);
+    pieces would need thousands of queries."""
+    tiles = sc.field_tiles(*ORION, fov, maxmag, "gavo")
+    assert len(tiles) == 1
+    query = tiles[0]["query"]
+    assert "+ 0" not in query and f"< {maxmag:5f}" in query
+    assert tiles[0]["radius"] == pytest.approx(fov / math.sqrt(2))
+    # Same circle as the desktop's query; splitting it would only make things slower.
+    assert sc.split_tile(tiles[0], *ORION, maxmag, "gavo") == []
+
+
+@pytest.mark.parametrize(("fov", "maxmag"), [(45.0, 10.0), (30.0, 12.0), (60.0, 9.0), (20.0, 16.0)])
+def test_wide_deep_field_is_refused_without_queries(fov: float, maxmag: float) -> None:
+    """Too many pieces to fetch in time and too deep for the magnitude index: the page says so
+    at once and points to an ESA download."""
+    assert sc.field_tiles(*ORION, fov, maxmag, "gavo") == []
+
+
+def test_largest_field_that_is_still_fetched_in_pieces() -> None:
+    tiles = sc.field_tiles(*ORION, 5.0, 16, "gavo")
+    assert 1 < len(tiles) <= sc.MAX_TILES
+    assert all("+ 0" in t["query"] for t in tiles)
+
+
+def test_wide_bright_field_esa_query_is_the_desktop_query() -> None:
+    query = sc.gaia_adql(*ORION, 60, 7, "esa")
+    assert "gaiadr3.gaia_source" in query and "42.426407" in query and "< 7.000000" in query
+
+
 def test_merge_removes_overlap_duplicates_only() -> None:
     table = sc.parse_gaia_table((Path(__file__).parent / "fixtures" / "m13_gavo.csv").read_bytes(), "x.csv")
     first = {k: v[:900] for k, v in table.items()}
@@ -204,3 +239,32 @@ def test_outside_note_only_for_uploaded_files(session: sc.Session, uploaded: boo
         assert notes == ["Only 604 of 1,498 stars in the file are inside the field."]
     else:
         assert notes == []
+
+
+ORION_TEXT = ("+05 : 36 : 13", "-01 : 12 : 07")
+
+
+def test_orion_at_60_degrees_shows_stars_with_absolute_magnitudes(session: sc.Session) -> None:
+    """Homework: Orion, FOV 60, magnitude 7 (recorded from GAVO's magnitude-index query)."""
+    data = (FIXTURES / "orion60_gavo.csv").read_bytes()
+    result = session.show_stars([data], "gavo.csv", "test", *ORION_TEXT, 60.0, 7.0, "Orion")
+    assert result["rows"] == 3259
+    assert 2000 < result["count"] <= 3259 + 200  # plus Hipparcos stars brighter than Gaia's limit
+    assert result["magnitude_type"] == "Absolute"  # ass.py above 5°
+    assert result["pct_hi"] > 0
+    assert session.hr_diagram("Absolute")[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_orion_gavo_and_esa_give_the_same_stars() -> None:
+    gavo = sc.parse_gaia_table((FIXTURES / "orion60_gavo.csv").read_bytes(), "gavo.csv")
+    esa = sc.parse_gaia_table((FIXTURES / "orion60_esa.vot").read_bytes(), "esa.vot")
+    order_g, order_e = np.lexsort((gavo["dec"], gavo["ra"])), np.lexsort((esa["dec"], esa["ra"]))
+    for name in ("ra", "dec", "phot_g_mean_mag", "parallax"):
+        np.testing.assert_allclose(gavo[name][order_g], esa[name][order_e], rtol=1e-6, err_msg=name)
+
+
+def test_narrow_field_starts_with_apparent_magnitudes(session: sc.Session) -> None:
+    result = session.show_stars(
+        [(FIXTURES / "m13_gavo.csv").read_bytes()], "gavo.csv", "test", RA_TEXT, DEC_TEXT, FOV, MAXMAG, "M13"
+    )
+    assert result["magnitude_type"] == "Apparent"
