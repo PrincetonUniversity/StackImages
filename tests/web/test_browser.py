@@ -1124,3 +1124,28 @@ def test_full_screen_is_black_with_readable_dark_controls(browser, sites) -> Non
     normal = page.evaluate("getComputedStyle(document.querySelector('.controls')).backgroundColor")
     assert normal != colors["panel"]  # the page's normal look is unchanged
     page.close()
+
+
+def version_labels(browser, url: str) -> list[str]:  # type: ignore[no-untyped-def]
+    page = browser.new_page()
+    labels = []
+    for path in ("", "ShowClusters/", "HRDiagram/"):
+        page.goto(url + path)
+        page.wait_for_function("document.querySelector('[data-site-version]').textContent.trim() !== ''")
+        labels.append(page.text_content("[data-site-version]") or "")
+    page.close()
+    return labels
+
+
+def test_unstamped_build_says_development_build(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    assert version_labels(browser, sites["root"]) == ["Development build"] * 3
+
+
+def test_stamped_build_shows_its_version_on_every_page(browser, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    import web_version
+
+    site = tmp_path / "site"
+    build_site.build(site, ROOT / "build" / "vendor", None)
+    web_version.stamp(site, "1.4", "2026-11-07")
+    with serve(site) as url:
+        assert version_labels(browser, url) == ["Version 1.4 (2026-11-07)"] * 3

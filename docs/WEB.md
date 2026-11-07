@@ -348,7 +348,7 @@ cluster is faster.
 | Workflow | Runs on | Does |
 |---|---|---|
 | `ci.yml` (desktop) | push/PR to `main`, except web-only files and Markdown; manual | Desktop GUI tests under Xvfb, equivalence test, packaging tests in `ci/desktop-tests.Dockerfile`; builds `PyWin.tar`; on `main`, publishes release `v<ass.py version>.<n>` when the bundle's app/data files changed (`scripts/next_release.py`) |
-| `pages.yml` (web) | push/PR touching the web files (not Markdown); manual | eslint + tsc (Node container), ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`), verified Pyodide download, site build with the latest snapshots, `StackImages-web.zip` of the site and `HRDiagram-web.zip` of the HR page; deploys on `main`, then publishes each zip whose contents changed as a release (`web-*`, `hrdiagram-*`) |
+| `pages.yml` (web) | push/PR touching the web files (not Markdown); manual | eslint + tsc (Node container), ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`), verified Pyodide download, site build with the latest snapshots, `StackImages-web.zip` of the site and `HRDiagram-web.zip` of the HR page; stamps the site's version (`scripts/web_version.py`); on a PR that changes the site, requires its `docs/CHANGELOG.md` entry; deploys on `main`, then publishes a new version as a `web-1.N` release with both zips |
 | `snapshots.yml` | manual only | Fetches ~75 clusters (`scripts/build_snapshots.py`: GAVO in pieces, ESA as fallback, lower magnitude limit if both fail), validates, publishes a `snapshots-*` release, redeploys the page. Resumes from the last release; re-run to fill gaps |
 
 Documentation-only changes (`README.md`, anything under `docs/`, any other `.md` file) start no
@@ -382,14 +382,33 @@ scripts/run_web.sh --snapshots build/snapshots
 Without Docker, a `.venv` works too: `uv venv --python 3.13 .venv && uv pip install
 --python .venv/bin/python -r requirements-web.lock`, then the same `python …` commands.
 
+## Versions
+
+The site (home page, Show Clusters, HR Diagram of Your Own Image) has one version number,
+**web 1.N**, shown at the bottom of every page as "Version 1.4 (2026-11-07)" with a link to
+[CHANGELOG.md](CHANGELOG.md). `scripts/web_version.py` decides and stamps it in `pages.yml`:
+
+1. After the site is built and zipped, `zip_site.py --fingerprint` hashes the site's contents,
+   leaving out the build time and the version stamp (`version.js`).
+2. If that hash is the one recorded in the newest `web-1.N` release, the site is unchanged and
+   keeps its number and date (a redeploy makes no release). Otherwise it is the next number,
+   dated today. The first number comes from `web/VERSION`; raising it starts again at `.0`.
+3. The number is written into `version.js` in each page folder (an unstamped local build says
+   "Development build"), and the site is zipped again.
+4. On a pull request that changes the site, CI fails until `docs/CHANGELOG.md` has a
+   `## 1.N (date)` entry for the number it names. On `main`, a new version is deployed and then
+   published as release `web-1.N` with both zips, that entry as its notes, and the fingerprint.
+   A redeploy after new snapshots (`snapshots.yml`) also changes the site; it is released with a
+   note naming the snapshots if no entry was written.
+
+Before 1.0 (2026-11-07), releases were dated: `web-YYYYMMDD-HHMM` and `hrdiagram-YYYYMMDD-HHMM`.
+
 ## Hosting a copy elsewhere
 
 Every deploy also publishes the whole site as one zip:
 https://princetonuniversity.github.io/StackImages/StackImages-web.zip
 (`scripts/zip_site.py`, run by `pages.yml` after the site build). Each version is also
-kept as a `web-YYYYMMDD-HHMM` release, never marked Latest. A new release is made only
-when the site's contents change: `zip_site.py --fingerprint` hashes the zip without the
-build time. Unzipped, it is a
+kept as a `web-1.N` release (below), never marked Latest. Unzipped, it is a
 `StackImages/` folder: the home page, `ShowClusters/` with Pyodide and the saved
 snapshots, `HRDiagram/`, and `HOSTING.txt` with these instructions. Copy the folder unchanged into
 any directory of a static web site. All links are relative, so it works from a

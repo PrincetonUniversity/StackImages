@@ -171,9 +171,12 @@ To host a copy on another web site, download
 https://princetonuniversity.github.io/StackImages/StackImages-web.zip, unzip it, and upload the
 `StackImages` folder unchanged; no server settings are needed. For the HR diagram page alone,
 download https://princetonuniversity.github.io/StackImages/HRDiagram-web.zip (about 43 MB) and upload
-its `HRDiagram` folder the same way. Each version of both is also on the
-[Releases](https://github.com/PrincetonUniversity/StackImages/releases) page, as `web-*` and `hrdiagram-*` (see "Hosting a copy elsewhere" in
-[docs/WEB.md](docs/WEB.md)).
+its `HRDiagram` folder the same way.
+
+The web pages are versioned as a whole: web 1.0, 1.1, … The version is shown at the bottom of
+every page, each one is described in [docs/CHANGELOG.md](docs/CHANGELOG.md), and each is a
+`web-1.N` release on the [Releases](https://github.com/PrincetonUniversity/StackImages/releases)
+page with both zips (see "Versions" in [docs/WEB.md](docs/WEB.md)).
 
 Quick local run (Docker only):
 
@@ -212,6 +215,6 @@ Notes
   README/LICENSE edits alone don't trigger one. Run CI (desktop) manually on `main` to release on demand.
 - Maintainers: run the desktop tests locally with `docker-compose run --rm desktop-tests`.
   `environment.yml` and `ci/conda-linux-64.lock` define the CI environment; regenerate the lock with `scripts/lock_conda_env.sh`.
-- CI: `ci.yml` (desktop app, `PyWin.tar`), `pages.yml` (web pages, with the `web-*` and `hrdiagram-*` releases)
+- CI: `ci.yml` (desktop app, `PyWin.tar`), `pages.yml` (web pages, with the `web-1.N` releases)
   and `snapshots.yml` (web fallback data) are independent workflows; see [docs/WEB.md](docs/WEB.md#workflows).
   Changes to Markdown files alone (this README, `docs/`) start no workflow.
