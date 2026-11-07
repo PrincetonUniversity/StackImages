@@ -10,7 +10,7 @@ Usage:
   .venv/bin/python scripts/zip_site.py --fingerprint _site/StackImages-web.zip
 
 --fingerprint prints a hash of the zip's contents, leaving out the build time recorded in
-manifest.json; pages.yml publishes a web-* release only when it changes.
+manifest.json and version.js; pages.yml publishes a new web-1.N release only when it changes.
 """
 
 from __future__ import annotations
@@ -83,11 +83,12 @@ def write_zip(site: Path, out: Path) -> int:
 
 
 def fingerprint(archive: Path) -> str:
-    """Hash of every file in the zip (names and contents) except the build record."""
+    """Hash of every file in the zip (names and contents) except the build record and the
+    version stamp (version.js): CI decides the version from this hash, then stamps it."""
     digest = hashlib.sha256()
     with zipfile.ZipFile(archive) as z:
         for name in sorted(z.namelist()):
-            if name != BUILD_RECORD:
+            if name != BUILD_RECORD and not name.endswith("/version.js"):
                 digest.update(f"{name}\0{hashlib.sha256(z.read(name)).hexdigest()}\n".encode())
     return digest.hexdigest()
 

@@ -29,14 +29,24 @@ sys.path.insert(0, str(ROOT / "web"))
 
 import showclusters as sc  # noqa: E402
 
-WEB_FILES = ("index.html", "app.js", "stretch.js", "viewer.js", "worker.js", "style.css", "showclusters.py")
+WEB_FILES = (
+    "index.html",
+    "app.js",
+    "stretch.js",
+    "viewer.js",
+    "worker.js",
+    "style.css",
+    "showclusters.py",
+    "version.js",
+)
 CATALOGS = ("NI2021_MessierObjects.csv", "NI2021_NGCObjects.csv", "ICObj.csv")
 APP_PATH = "ShowClusters"  # served at https://princetonuniversity.github.io/StackImages/ShowClusters/
 # HR Diagram of Your Own Image, at .../StackImages/HRDiagram/. It uses ShowClusters' Pyodide
 # (../ShowClusters/vendor/) rather than a second copy.
 HR_PATH = "HRDiagram"
 HR_PAGE_FILES = ("index.html", "app.js", "worker.js")  # from web/hrdiagram/
-HR_SHARED_FILES = ("stretch.js", "viewer.js", "style.css", "showclusters.py", "hrimage.py")  # from web/
+# from web/
+HR_SHARED_FILES = ("stretch.js", "viewer.js", "style.css", "showclusters.py", "hrimage.py", "version.js")
 # The site root is a StackImages home page (web/home.html) linking to the app.
 
 
@@ -106,6 +116,7 @@ def build(site: Path, vendor: Path, snapshots: Path | None) -> None:
     build_hr_page(site / HR_PATH)
     (site / ".nojekyll").write_text("")
     shutil.copy2(ROOT / "web" / "style.css", site / "style.css")
+    shutil.copy2(ROOT / "web" / "version.js", site / "version.js")  # web_version.py stamps all three
     home = (ROOT / "web" / "home.html").read_text()
     (site / "index.html").write_text(
         home.replace('"style.css"', f'"style.css?v={digest(site / "style.css")[:12]}"')
@@ -114,7 +125,7 @@ def build(site: Path, vendor: Path, snapshots: Path | None) -> None:
     files = {
         p.relative_to(out).as_posix(): digest(p)
         for p in sorted(out.rglob("*"))
-        if p.is_file() and p.name != "manifest.json"
+        if p.is_file() and p.name not in ("manifest.json", "version.js")  # both change without a site change
     }
     manifest = {
         "built": datetime.now(UTC).isoformat(timespec="seconds"),

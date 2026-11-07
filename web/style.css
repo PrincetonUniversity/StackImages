@@ -105,6 +105,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem; backgro
 summary { cursor: pointer; font-weight: 600; }
 details label { display: block; font-weight: 600; margin: 16px 0 8px; }
 footer { margin-top: 28px; }
+.site-version { margin-top: 10px; }
 [hidden] { display: none !important; }
 @media (max-width: 600px) {
   main { padding: 24px 16px; }

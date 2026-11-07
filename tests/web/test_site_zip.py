@@ -87,6 +87,27 @@ def test_fingerprint_ignores_only_the_build_time(site: Path, archive: Path, tmp_
     assert zip_site.fingerprint(rebuilt) != zip_site.fingerprint(archive)
 
 
+def test_fingerprint_ignores_the_version_stamp(site: Path, archive: Path, tmp_path: Path) -> None:
+    """CI fingerprints the site before deciding its version, then stamps it: the stamp must not
+    count as a change (or every deploy would be a new version)."""
+    import web_version
+
+    copy = tmp_path / "site"
+    shutil.copytree(site, copy)
+    web_version.stamp(copy, "1.7", "2026-11-07")
+    stamped = tmp_path / "stamped.zip"
+    zip_site.write_zip(copy, stamped)
+    assert stamped.read_bytes() != archive.read_bytes()
+    assert zip_site.fingerprint(stamped) == zip_site.fingerprint(archive)
+    with zipfile.ZipFile(stamped) as z:
+        for name in (
+            "StackImages/version.js",
+            "StackImages/ShowClusters/version.js",
+            "StackImages/HRDiagram/version.js",
+        ):
+            assert 'version: "1.7"' in z.read(name).decode()
+
+
 def test_fingerprint_command(archive: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert zip_site.main(["--fingerprint", str(archive)]) == 0
     assert capsys.readouterr().out.strip() == zip_site.fingerprint(archive)
