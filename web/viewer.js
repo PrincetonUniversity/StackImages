@@ -70,7 +70,12 @@ export function setUpViewer({ sliders, initial, reset, hasPicture }) {
     resetConfirm.close();
   });
   $("reset-cancel").addEventListener("click", () => resetConfirm.close());
-  resetConfirm.addEventListener("close", () => resetButton.focus());
+  // The close event arrives a moment after the dialog closes: return focus to Reset only if it
+  // hasn't gone elsewhere since (e.g. Esc again, leaving full screen, focuses that button).
+  resetConfirm.addEventListener("close", () => {
+    const at = document.activeElement;
+    if (!at || at === document.body || resetConfirm.contains(at)) resetButton.focus();
+  });
   fullscreenButton.addEventListener("click", enterFullscreen);
   exitButton.addEventListener("click", exitFullscreen);
   document.addEventListener("keydown", (event) => {
