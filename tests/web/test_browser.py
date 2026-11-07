@@ -227,17 +227,83 @@ def test_orion_at_60_degrees(browser, sites) -> None:  # type: ignore[no-untyped
     page.close()
 
 
-def test_wide_deep_field_points_to_esa_without_asking_gavo(browser, sites) -> None:  # type: ignore[no-untyped-def]
-    requests: list[dict[str, list[str]]] = []
-    page = open_page(browser, sites["without"], gavo_ok(requests))
+ASYNC = "https://dc.g-vo.org/tap/async"
+JOB = "https://dc.g-vo.org/__system__/tap/run/async/job123"
+
+
+class FakeAsync:
+    """GAVO's asynchronous TAP service as measured 2026-11-07. GAVO answers each POST with a 303
+    to the job, whose document names it (<uws:jobId>); Playwright can't fake a redirect the
+    browser then follows, so this answers the POSTs with what the browser ends up receiving."""
+
+    def __init__(self, polls_before_done: int = 2, final: str = "COMPLETED") -> None:
+        self.polls_before_done, self.final = polls_before_done, final
+        self.log: list[tuple[str, str, dict[str, list[str]]]] = []
+
+    def handle(self, route) -> None:  # type: ignore[no-untyped-def]
+        request = route.request
+        url, method = request.url, request.method
+        form = parse_qs(request.post_data or "") if method == "POST" else {}
+        self.log.append((method, url, form))
+        cors = {"access-control-allow-origin": "*"}
+        if url == f"{JOB}/phase" and method == "GET":
+            polls = sum(1 for m, u, _ in self.log if m == "GET" and u == url)
+            phase = "EXECUTING" if polls <= self.polls_before_done else self.final
+            route.fulfill(status=200, body=phase, headers={**cors, "content-type": "text/plain"})
+        elif url == f"{JOB}/results/result":
+            route.fulfill(
+                status=200,
+                body=(FIXTURES / "orion60_gavo.csv").read_bytes(),
+                headers={**cors, "content-type": "text/csv;header=present"},
+            )
+        else:  # creating, starting or deleting the job: the job's document
+            body = "<uws:job><uws:jobId>job123</uws:jobId><uws:phase>PENDING</uws:phase></uws:job>"
+            route.fulfill(status=200, body=body, headers={**cors, "content-type": "text/xml"})
+
+
+def test_wide_deep_field_comes_from_one_async_job(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    sync: list[dict[str, list[str]]] = []
+    fake = FakeAsync()
+    page = open_page(browser, sites["without"], gavo_ok(sync))
+    page.route("https://dc.g-vo.org/tap/async*", fake.handle)
+    page.route("https://dc.g-vo.org/__system__/**", fake.handle)
     enter_orion(page, "45", "10")
     page.click("#show-stars")
-    page.wait_for_selector("#error:not([hidden])")
+    page.wait_for_function(
+        "document.getElementById('status').textContent.includes('preparing')", timeout=30_000
+    )
+    assert not page.is_hidden("#progress")
+    page.wait_for_function("!document.getElementById('stars-content').hidden", timeout=60_000)
+    assert sync == []  # no quick queries or pieces
+    created = [form for method, url, form in fake.log if method == "POST" and url == ASYNC]
+    assert len(created) == 1
+    query = created[0]["QUERY"][0]
+    assert "gaia.dr3lite" in query and "< 10.000000" in query and "+ 0" not in query
+    assert created[0]["MAXREC"] == ["300000"] and created[0]["FORMAT"] == ["csv"]
+    assert ("POST", f"{JOB}/phase", {"PHASE": ["RUN"]}) in fake.log
+    assert ("POST", JOB, {"ACTION": ["DELETE"]}) in fake.log  # the job is cleaned up
+    assert int((page.text_content("#count") or "0").replace(",", "")) > 1000
+    assert page.text_content("#source") == "Gaia DR3 via GAVO"
+    assert page.input_value("#magtype") == "Absolute"
+    assert page.is_hidden("#progress")
+    assert page.errors == []  # type: ignore[attr-defined]
+    page.close()
+
+
+def test_failed_async_job_points_to_esa(browser, sites) -> None:  # type: ignore[no-untyped-def]
+    fake = FakeAsync(polls_before_done=0, final="ERROR")
+    page = open_page(browser, sites["without"], gavo_ok([]))
+    page.route("https://dc.g-vo.org/tap/async*", fake.handle)
+    page.route("https://dc.g-vo.org/__system__/**", fake.handle)
+    enter_orion(page, "45", "10")
+    page.click("#show-stars")
+    page.wait_for_selector("#error:not([hidden])", timeout=60_000)
     error = page.text_content("#error") or ""
-    assert "Maximum Magnitude 8.5" in error and "ESA" in error, error
-    assert requests == []
+    assert "ESA" in error and "wide field" in error, error
     assert page.evaluate("document.getElementById('upload').open") is True
     assert "< 10.000000" in (page.text_content("#adql") or "")  # the query to paste into ESA
+    assert ("POST", JOB, {"ACTION": ["DELETE"]}) in fake.log
+    assert page.is_hidden("#progress")
     page.close()
 
 

@@ -165,6 +165,11 @@ TILE_RADIUS = 0.9  # degrees; first-pass piece size
 # time (a 5° field takes 36), so the page points to an ESA download instead.
 WIDE_MAXMAG = 8.5
 MAX_TILES = 64
+# Those deeper wide fields go to GAVO's asynchronous service as one job (no 20 s limit; jobs
+# may run 2 hours). Measured 2026-11-07, Orion: FOV 45/G 10 in 112 s; FOV 30/G 12 in 279 s with
+# all 120,593 stars, which ESA's anonymous downloads cut off at 50,000 (ESA_ROW_LIMIT).
+ESA_ROW_LIMIT = 50_000
+_OVERFLOW = re.compile(rb'name="QUERY_STATUS"\s+value="OVERFLOW"')
 MIN_TILE_RADIUS = 0.05  # degrees; below this, give up (the field is simply too dense)
 _MARGIN = 1.02  # covers the small distortion between tangent-plane squares and sky circles
 
@@ -260,6 +265,12 @@ def split_tile(
         for dx in (-1, 1)
         for dy in (-1, 1)
     ]
+
+
+_INCOMPLETE_ADVICE = (
+    "Click Show Stars to get the whole field from the live data source instead, "
+    "or use a smaller Field of View or a lower Maximum Magnitude."
+)
 
 
 def merge_tables(tables: list[dict[str, np.ndarray]]) -> dict[str, np.ndarray]:
@@ -969,13 +980,15 @@ class Session:
         """Validate the inputs exactly as the boxes show them; return both queries."""
         ra, dec = parse_sexagesimal(ra_text), parse_sexagesimal(dec_text)
         self._field = (ra, dec, maxmag)
+        tiles = field_tiles(ra, dec, fov, maxmag, "gavo")
+        whole = circle_adql(ra * 15, dec, fov / math.sqrt(2), maxmag, "gavo", magnitude_index=True)
         return {
             "ra": ra,
             "dec": dec,
             "gavo": gaia_adql(ra, dec, fov, maxmag, "gavo"),
-            "gavo_tiles": field_tiles(ra, dec, fov, maxmag, "gavo"),
+            "gavo_tiles": tiles,
+            "gavo_async": None if tiles else whole,
             "esa": gaia_adql(ra, dec, fov, maxmag, "esa"),
-            "wide_maxmag": WIDE_MAXMAG,
         }
 
     def split(self, tile: Any) -> list[dict[str, Any]]:
@@ -1002,7 +1015,17 @@ class Session:
         self.frame = None
         query = self.plan(ra_text, dec_text, fov, maxmag)
         chunks = _chunks(data)
+        if uploaded and any(_OVERFLOW.search(chunk) for chunk in chunks):
+            raise InputError(
+                "The ESA archive marked this file as incomplete: it stopped at its row limit. "
+                + _INCOMPLETE_ADVICE
+            )
         parts = [parse_gaia_table(chunk, filename) for chunk in chunks]
+        if uploaded and sum(len(part["ra"]) for part in parts) == ESA_ROW_LIMIT:
+            raise InputError(
+                f"This file has exactly {ESA_ROW_LIMIT:,} stars, where the ESA archive stops results "
+                "for users who aren't logged in, so the field is probably incomplete. " + _INCOMPLETE_ADVICE
+            )
         display = display_from_file(chunks[0]) if uploaded and len(chunks) == 1 else None
         notes: list[str] = []
         if max_rows and any(len(part["ra"]) >= max_rows for part in parts):
