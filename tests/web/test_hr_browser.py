@@ -222,6 +222,33 @@ def test_full_screen_like_show_clusters(hr_page: Any) -> None:
     page.click("#reset-ok")
 
 
+def test_leaving_full_screen_right_after_the_reset_question_keeps_focus(hr_page: Any) -> None:
+    """The dialog's close event arrives a moment after it closes. Leaving full screen in that
+    moment must leave focus on the full screen button, not pull it back to Reset sliders
+    (seen as a flaky test_full_screen_like_show_clusters, locally and in CI on 2026-11-07)."""
+    page = hr_page
+    page.click("#fullscreen")
+    page.wait_for_selector("#exit-fullscreen:visible")
+    page.fill("#colsat", "9")
+    page.dispatch_event("#colsat", "input")
+    page.click("#reset-sliders")
+    page.wait_for_function("document.getElementById('reset-confirm').open")
+    focused = page.evaluate(
+        """async () => {
+            document.getElementById('reset-confirm').close();  // as Esc does
+            document.getElementById('exit-fullscreen').click();  // before the close event arrives
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            return document.activeElement.id;
+        }"""
+    )
+    assert focused == "fullscreen"
+    page.click("#reset-sliders")
+    page.wait_for_function("document.getElementById('reset-confirm').open")
+    page.click("#reset-ok")
+    page.wait_for_function("!document.getElementById('reset-confirm').open")
+    assert page.evaluate("document.activeElement.id") == "reset-sliders"  # back where the student was
+
+
 def browser_points(page: Any) -> list[list[float]]:
     with page.expect_download() as info:
         page.click("#points-download")
