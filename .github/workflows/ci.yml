@@ -8,10 +8,10 @@ name: CI (desktop)
 on:
   push:
     branches: [main]
-    paths-ignore: ["web/*.js", "web/*.html", "web/*.css", "web/hrdiagram/**", "docs/**", "**.md", ".github/workflows/pages.yml"]
+    paths-ignore: ["web/*.js", "web/*.html", "web/*.css", "web/hrdiagram/**", "docs/**", "**.md", ".github/workflows/pages.yml", ".github/workflows/install-commands.yml"]
   pull_request:
     branches: [main]
-    paths-ignore: ["web/*.js", "web/*.html", "web/*.css", "web/hrdiagram/**", "docs/**", "**.md", ".github/workflows/pages.yml"]
+    paths-ignore: ["web/*.js", "web/*.html", "web/*.css", "web/hrdiagram/**", "docs/**", "**.md", ".github/workflows/pages.yml", ".github/workflows/install-commands.yml"]
   workflow_dispatch:
 
 permissions:

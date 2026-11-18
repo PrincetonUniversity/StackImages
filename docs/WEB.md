@@ -227,8 +227,10 @@ README's "Data and credits"; in code, `GAIA_CREDIT`, `HYG_CREDIT`, `GAVO_CREDIT`
 | `pages.yml` | push/PR touching web files; manual | eslint + tsc; ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`); verified Pyodide; site build with latest snapshots; both zips; version stamp; deploy and `web-1.N` release on `main` |
 | `snapshots.yml` | manual | Fetches ~75 clusters (GAVO in pieces, ESA fallback, lower limit if both fail), validates, releases `snapshots-*`, redeploys. Resumes; re-run to fill gaps |
 
-Markdown-only changes start no workflow; the README in `PyWin.tar` refreshes with the next desktop
-release. To redeploy anyway, run the workflow manually. Nothing generated is committed: Pyodide
+`install-commands.yml` runs the README's download and update commands on Windows (cmd.exe) and
+macOS (zsh) runners against the live `PyWin.tar` on README changes, weekly, or on demand.
+Otherwise Markdown-only changes start no workflow; the README in `PyWin.tar` refreshes with the
+next desktop release. To redeploy anyway, run the workflow manually. Nothing generated is committed: Pyodide
 (`build/vendor/`), the site (`_site/`) and snapshots (`build/snapshots/`) are gitignored.
 
 ## Local development

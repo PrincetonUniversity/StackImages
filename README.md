@@ -142,7 +142,9 @@ Desktop releases
   in `PyWin.tar` changed. Run `ci.yml` manually on `main` to release on demand.
 - `environment.yml` and `ci/conda-linux-64.lock` define the CI environment; regenerate the lock
   with `scripts/lock_conda_env.sh`.
-- Markdown-only changes start no workflow.
+- `install-commands.yml` runs this README's download and update commands on Windows and macOS
+  runners (`scripts/readme_install.py`) when the README changes and weekly. Other Markdown-only
+  changes start no workflow.
 
 Data and credits
 ----------------

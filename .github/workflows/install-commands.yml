@@ -1,0 +1,81 @@
+name: Install commands
+
+# Runs the README's download and update commands on real Windows (cmd.exe, as in Anaconda
+# Prompt) and macOS (zsh) runners against the live PyWin.tar, then checks every file
+# (scripts/readme_install.py). The commands are read from README.md, so a README change
+# starts this workflow even though Markdown alone starts neither ci.yml nor pages.yml.
+# Weekly too, because the server's PyWin.tar and the runner images change without a commit.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "scripts/readme_install.py"
+      - "tests/packaging/test_readme_install.py"
+      - ".github/workflows/install-commands.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "scripts/readme_install.py"
+      - "tests/packaging/test_readme_install.py"
+      - ".github/workflows/install-commands.yml"
+  schedule:
+    - cron: "17 12 * * 1"  # Mondays 12:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install-commands-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, types and unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-compose-action@v2
+        with:
+          version: v2.39.4
+      - name: Provide docker-compose command
+        run: echo "$GITHUB_WORKSPACE/.github/bin" >> "$GITHUB_PATH"
+      - name: Build tool image
+        run: docker-compose build web-tools
+      - name: ruff, mypy and tests
+        run: >-
+          docker-compose run --rm -T web-tools sh -c
+          "ruff check scripts tests && ruff format --check scripts tests && mypy &&
+          python -m pytest -v -p no:cacheprovider tests/packaging/test_readme_install.py"
+
+  commands:
+    name: README commands on ${{ matrix.name }}
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-2025
+            platform: windows
+            python: python
+          - name: macOS
+            os: macos-15
+            platform: macos
+            python: python3
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Show the commands under test
+        shell: bash
+        run: |
+          ${{ matrix.python }} --version
+          ${{ matrix.python }} scripts/readme_install.py show ${{ matrix.platform }} download
+          ${{ matrix.python }} scripts/readme_install.py show ${{ matrix.platform }} update
+      - name: Download, damage, update twice, verify
+        shell: bash
+        run: ${{ matrix.python }} scripts/readme_install.py check ${{ matrix.platform }}
