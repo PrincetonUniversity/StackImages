@@ -1,45 +1,30 @@
 # StackImages on the web
 
-**Live pages:**
-
+- Home: https://princetonuniversity.github.io/StackImages/ (`web/home.html`)
 - Show Clusters: https://princetonuniversity.github.io/StackImages/ShowClusters/
 - HR Diagram of Your Own Image: https://princetonuniversity.github.io/StackImages/HRDiagram/
-  (see [HR diagram of your own image](#hr-diagram-of-your-own-image) below)
 
-The site root, https://princetonuniversity.github.io/StackImages/, is a StackImages home page
-(`web/home.html`) that links to both pages and to the desktop app. GitHub serves a project site
-at `<org>.github.io/<repo>/`, so the app lives in a `ShowClusters/` folder of this repo's site rather
-than at `…github.io/ShowClusters/`, which would need a renamed or separate repo.
+Both tools run Bob's desktop code, ported, in the browser with [Pyodide](https://pyodide.org/).
+The desktop app is unchanged and still ships in `PyWin.tar`. GitHub serves project sites at
+`<org>.github.io/<repo>/`, hence the `StackImages/` prefix.
 
-Show Clusters does what `ShowClusters` (in `ass.py`) does: look up a Messier, NGC or IC
-object, download its Gaia DR3 stars, draw the simulated star field, and plot the HR
-diagram. It runs entirely in the student's browser with
-[Pyodide](https://pyodide.org/) (Python compiled to WebAssembly), so there is nothing to
-install. The desktop app is unchanged and still ships in `PyWin.tar`.
-
-## How it fits together
+## Layout
 
 ```
 StackImages/
-├── ass.py, ShowClusters.py, …        desktop app (Bob's code, unchanged)
+├── ass.py, ShowClusters.py, …        desktop app (unchanged)
 ├── web/
-│   ├── home.html                     StackImages home page (site root)
-│   ├── index.html, style.css         the Show Clusters page (site/ShowClusters/)
-│   ├── app.js                        form, Gaia requests, picture sliders, downloads
-│   ├── worker.js                     starts Pyodide in a background thread
-│   └── showclusters.py               the science: a GUI-free port of ShowClusters
-├── scripts/
-│   ├── vendor_pyodide.py             downloads + verifies Pyodide (build/vendor/)
-│   ├── build_site.py                 assembles the site (_site/)
-│   ├── build_snapshots.py            saves Gaia results for the fallback
-│   ├── run_web.sh                    build and serve locally
-│   └── package_pywin.sh              desktop bundle (PyWin.tar)
-├── tests/web/                        unit, snapshot and in-browser tests
-├── tests/desktop/                    desktop GUI tests + equivalence test vs ass.py
+│   ├── home.html                     site root
+│   ├── index.html, app.js, worker.js Show Clusters page (site/ShowClusters/)
+│   ├── showclusters.py               GUI-free port of ShowClusters
+│   ├── hrdiagram/, hrimage.py        HR Diagram page and its port
+│   └── stretch.js, style.css         shared by both pages
+├── scripts/                          vendor_pyodide.py, build_site.py, build_snapshots.py,
+│                                     zip_site.py, web_version.py, run_web.sh, package_pywin.sh
+├── tests/web/                        unit, snapshot and browser tests
+├── tests/desktop/                    desktop GUI tests + equivalence tests vs ass.py
 └── .github/workflows/                ci.yml · pages.yml · snapshots.yml
 ```
-
-In the browser:
 
 ```
 index.html ─ app.js ──fetch──▶ GAVO (Gaia DR3)         live star data
@@ -49,424 +34,280 @@ index.html ─ app.js ──fetch──▶ GAVO (Gaia DR3)         live star dat
            worker.js ─ Pyodide ─ showclusters.py        select, render, HR diagram
 ```
 
-`app.js` does every network request and hands the bytes to Python, so the Python code
-never touches the network and is tested natively with the same files.
+`app.js` makes every network request and hands bytes to Python, so the Python never touches the
+network and is tested natively on the same files.
 
-### What `showclusters.py` ports from `ass.py`
+## Show Clusters
 
-| `ass.py` | Port | Notes |
+### Port of `ass.py`
+
+| `ass.py` | `showclusters.py` | Notes |
 |---|---|---|
-| `getRaDec`, `decimal_to_min_sec`, `min_sec_to_decimal` | `lookup_object`, `format_sexagesimal`, `parse_sexagesimal` | Input is validated first |
-| Query in `get_star_info` | `gaia_adql(..., "esa" or "gavo")` | Same ADQL; GAVO's table name and colour columns differ |
-| Filtering in `get_star_info` | `select_stars` | Same rules, including float32 storage and the HYG bright stars |
-| `show_gaia_image` (2D) | `frame_stars`, `render_field` | Star selection on the original 4000 px grid; picture drawn at 1200 px |
-| `slidershow` | `display_base` (Python) + `draw()` in `app.js` | Same sliders and formulas |
+| `getRaDec`, `decimal_to_min_sec`, `min_sec_to_decimal` | `lookup_object`, `format_sexagesimal`, `parse_sexagesimal` | Input validated first |
+| Query in `get_star_info` | `gaia_adql(..., "esa" or "gavo")` | Same ADQL; GAVO's table and colour columns differ |
+| Filtering in `get_star_info` | `select_stars` | Same rules, incl. float32 and HYG bright stars |
+| `show_gaia_image` (2D) | `frame_stars`, `render_field` | Selection on the 4000 px grid; drawn at 1200 px |
+| `slidershow` | `display_base` + `draw()` in `app.js` | Same sliders and formulas |
 | `GUI_makeHRdiag0` | `hr_arrays`, `hr_png` | Same points, sizes, colours, axes |
 
-**Equivalence test.** `tests/desktop/test_web_equivalence.py` imports the real `ass.py` in
-the desktop container, replaces only its wx widgets and the Gaia network call (with a
-recorded ESA result for M13), and requires the port to match: the query text, the selected
-stars in order, the star count and brightest star, the full 4000 px picture, and the HR
-diagram in both magnitude modes. It runs in `ci.yml` whenever `ass.py` or
-`web/showclusters.py` changes.
+**Equivalence test.** `tests/desktop/test_web_equivalence.py` runs the real `ass.py` in the
+desktop container, replacing only wx and the Gaia call (a recorded ESA result for M13), and
+requires identical query text, selected stars in order, count, brightest star, 4000 px picture
+and HR diagram in both modes. It runs in `ci.yml` when `ass.py` or `web/showclusters.py` changes.
 
-**When Bob sends a new `ass.py`:** commit it as usual. If CI's equivalence test fails, the
-math changed; update `web/showclusters.py` to match and the test tells you when you have.
+**When Bob sends a new `ass.py`:** commit it. If the equivalence test fails, the math changed;
+update `web/showclusters.py` until it passes.
 
-### Deliberate differences from the desktop app
+### Differences from the desktop app
 
-| Desktop app | Web page | Why |
+| Desktop | Web | Why |
 |---|---|---|
-| 4000 × 4000 picture | 1200 × 1200 (same star positions and counts) | ~240 MB arrays are too heavy for a browser tab |
-| "Show Stars" silently resets the magnitude type to Apparent (to absolute magnitudes above 5°), but the dropdown can still say otherwise | The dropdown visibly switches to Apparent, or to Absolute above 5° | Same rule, without the hidden state. Above 5° `ass.py` sets an internal `'Abs'` that plots absolute magnitudes but skips Absolute's removal of the brightest point; choosing Absolute in either app gives the same diagram |
-| Repeated "HR Diagram" clicks in Absolute mode keep editing the stored arrays (removing another star each time) | Every diagram is computed fresh | Repeatable results |
-| Plot title accumulates names (`M13, M44`) within one session | Title is the current object | Clarity |
-| 3D, "future" and Color Diagram options | Not included | Not used by HW #7 |
-| FOV up to any value | 0.01–90°, magnitude 4.5–21; wide, deep fields take a few minutes (one GAVO async job) | Beyond ~90° the tangent-plane picture breaks down; GAVO's quick endpoint can't send wide, deep fields in time (below) |
-| "Save Figure" | "Download HR diagram" / "Download picture" | Browser equivalent |
-| Picture in its own window, sliders under it | Picture sized to the screen with the sliders beside it (or below on narrow screens), plus a **full screen** icon (⤢) on the picture's corner (black surround, dark controls; Esc or ✕ to exit) and **Reset sliders** set apart below the downloads, which asks before discarding moved sliders | Picture and sliders are always visible together; Reset restores the starting stretch without being hit by accident; full screen gives the picture the whole screen |
+| 4000 × 4000 picture | 1200 × 1200, same stars | ~240 MB is too much for a tab |
+| "Show Stars" silently resets the magnitude type (Apparent; Absolute above 5°) | The dropdown visibly switches | Same rule, no hidden state. Above 5° `ass.py`'s internal `'Abs'` skips Absolute's removal of the brightest point; choosing Absolute gives the same diagram in both |
+| Repeated Absolute "HR Diagram" clicks remove another star each time | Each diagram computed fresh | Repeatable |
+| Title accumulates names (`M13, M44`) | Current object only | Clarity |
+| 3D, "future", Color Diagram | Not included | Not used by HW #7 |
+| Any FOV | 0.01–90°, magnitude 4.5–21 | Tangent-plane picture fails beyond ~90° |
+| "Save Figure" | Download buttons | Browser equivalent |
+| Picture in its own window | Picture beside the sliders (below on narrow screens), ⤢ full screen (Esc or ✕), **Reset sliders** below the downloads with a confirmation | Picture and sliders always visible together |
 
-## Where the star data comes from
+### Star data sources
 
-Browsers only let a page read data from another site if that site allows it (CORS).
-ESA's Gaia archive does not allow it; the German Astrophysical Virtual Observatory's copy
-of Gaia DR3 (`dc.g-vo.org`, table `gaia.dr3lite`) does. So the page tries, in order:
+ESA's Gaia archive doesn't allow cross-site reads (CORS); GAVO's copy of Gaia DR3
+(`dc.g-vo.org`, `gaia.dr3lite`) does. The page tries, in order:
 
-1. **GAVO, live.** The same query the desktop app sends to ESA. Large or crowded fields are
-   fetched in pieces (see below).
-2. **A saved copy**, if GAVO fails or times out and a snapshot covers the requested object,
-   field and magnitude limit. The page filters it to the requested field. Snapshots are
-   built by `snapshots.yml` (from GAVO in pieces, or ESA if GAVO fails) and published as
-   `snapshots-YYYYMMDD-HHMM` releases; the Pages build downloads the latest one.
-3. **A file the student downloads from the ESA Gaia archive** (CSV, VOTable or FITS). The
-   page shows the exact query to paste into the archive's ADQL search.
+1. **GAVO, live**: the desktop app's query, in pieces or as an async job when large (below).
+2. **A saved copy**, if GAVO fails and a snapshot covers the object, field and magnitude.
+   `snapshots.yml` builds them (GAVO, or ESA as fallback) as `snapshots-YYYYMMDD-HHMM` releases;
+   the Pages build includes the latest.
+3. **An ESA archive download** (CSV, VOTable or FITS); the page shows the ADQL to paste.
 
-Every result is labelled with its source on the page and in the HR diagram's corner.
+The source is labelled on the page and in the HR diagram's corner.
 
 ### Large and crowded fields
 
-GAVO's quick endpoint stops any query after about 20 seconds ("Query timed out"). Measured on
-2026-11-02, a circle up to 1° radius answers in 1–2 s in an ordinary field, but 1.2° times out
-(M44 with FOV 2 did), and in the dense Milky Way bulge (M7, M22) only about 0.2° answers in time.
-Many of those dense-field timeouts weren't about size. With a plain
-`phot_g_mean_mag < 16` condition, GAVO's database can choose its magnitude index, which
-in a dense field means scanning every bright star in the sky. Measured on 2026-11-03,
-M23 at FOV 0.3 timed out that way, while the same circle without the magnitude
-condition returned 37,793 stars in 11 s. The page therefore writes the condition as
-`phot_g_mean_mag + 0 < 16`. That selects the same stars but keeps the database on the
-position index:
+GAVO's quick endpoint (`tap/sync`) stops queries after ~20 s. A 1° radius answers in 1–2 s in an
+ordinary field; in the Milky Way bulge only ~0.2° does.
 
-| Field | Before | With `+ 0` |
+**`+ 0` trick.** With `phot_g_mean_mag < 16`, GAVO may use its magnitude index and scan every
+bright star in the sky. The page writes `phot_g_mean_mag + 0 < 16`: same stars, position index.
+Measured 2026-11-03 (results identical in every case; ESA's query is unchanged):
+
+| Field | Plain | With `+ 0` |
 |---|---|---|
-| M23, FOV 0.3, G < 16 | timed out (20 s) | 1,319 stars, ~2–15 s |
+| M23, FOV 0.3, G < 16 | timed out | 1,319 stars, 2–15 s |
 | M22, FOV 0.5, G < 18 | timed out | 44,252 stars, ~25 s |
 | NGC 6397, FOV 0.5, G < 17 | 9.0 s | 1.9 s |
 
-M13, M44 and M45 were unchanged, and every result both forms returned was identical.
-Only GAVO's query changed; the ESA query stays exactly as `ass.py` writes it.
+**Pieces.** A query circle up to 0.9° radius (FOV ≤ ~1.27°) is one query. Larger fields are
+covered by pieces of at most 0.9° radius (FOV 2 → 9), fetched four at a time. A piece that times
+out splits into four, down to 0.05°; below that the page says the field has too many stars. The
+pieces are reassembled into exactly the one-query result (duplicates dropped, trimmed to the
+circle and magnitude, fixed order). `tests/web/test_tiles.py` checks that byte for byte (stars,
+picture, HR points, PNG; one and two levels of splitting; poles and RA 0h), and `test_browser.py`
+checks it through the page. The page shows progress and a clock, and gives up after 3 minutes
+(M23 at FOV 2 took 139 s).
 
-So the page:
+**Wide fields.** Constellation-sized fields would need thousands of pieces. With a bright limit,
+the plain magnitude-index query answers the whole circle at once. Measured 2026-11-07 on Orion:
 
-1. Sends a field whose query circle is at most 0.9° radius (FOV up to ~1.27°) as **one query**,
-   exactly as before.
-2. Covers a larger field with **pieces** of at most 0.9° radius (FOV 2 → 9 pieces), fetched four
-   at a time. That limit applies to every piece, including the smaller ones made by splitting. Up
-   to 2026-11-03, the pieces of a split came one after another, which made crowded fields very slow.
-3. **Splits a piece that times out** into four smaller ones, down to 0.05°; if even those time
-   out, it says the field has too many stars and suggests a smaller FOV or magnitude limit.
-   A field that would need more than 64 pieces (a 5° field needs 36) isn't attempted (see below).
-4. **Reassembles** the pieces into exactly the one-query result: stars seen in two overlapping
-   pieces are kept once, the result is trimmed to the query's circle and magnitude limit (using
-   the centre and radius exactly as written in the query), and stars are put in a fixed order.
+| Field | Magnitude index, one query |
+|---|---|
+| FOV 60, G < 7 (HW Problem 1) | 3,285 stars, 2 s (`+ 0` times out) |
+| FOV 60, G < 8.5 | 16,274 stars, 2 s |
+| FOV 60, G < 9 | timed out (22 s near the Galactic centre) |
 
-`tests/web/test_tiles.py` checks that this gives the **same end result** as a single query,
-byte for byte: star count, brightest star, every star's values, the picture's pixels, the HR
-diagram's points and the downloaded PNG, for one and for two levels of splitting. It also
-checks that the pieces cover the field (including near the poles and across RA 0h).
-`test_browser.py` checks the same through the real page, including that the four pieces of a
-split are requested together.
+So a field wider than one piece with Maximum Magnitude ≤ 8.5 is one magnitude-index query.
 
-While the data downloads, the page shows a progress bar (parts done, for a field in pieces)
-and a clock: "*N* s so far. Please keep this tab open; crowded parts of the Milky Way can take a
-minute or two." Only the status line (which changes when a part arrives) is read by screen readers.
-When pieces have been split, the status line says so. The page gives up after 3 minutes and
-falls back to a saved copy or an ESA file. M23 at FOV 2 took 139 s on 2026-11-03.
+**Async jobs.** A wider, deeper field (over 64 pieces; a 5° field needs 36) is one job on GAVO's
+`tap/async` (no 20 s limit, CORS allowed). The page creates and starts the job, polls every 3 s,
+downloads the CSV, and always deletes the job; it gives up after 15 minutes and then offers the
+ESA download. Measured 2026-11-07 on Orion:
 
-### Wide fields (constellations)
-
-Pieces don't scale to constellation-sized fields: Orion at FOV 60 would need several thousand.
-But with a bright limit, the opposite trick works: GAVO's magnitude index (the plain condition,
-without `+ 0`) starts from the brightest stars in the sky, and answers the whole circle at once.
-Measured on 2026-11-07, centred on Orion:
-
-| Field | Magnitude index, one query | `+ 0`, one query |
-|---|---|---|
-| FOV 60, G < 7 (HW Problem 1) | 3,285 stars, 2 s | timed out |
-| FOV 60, G < 8 | 9,503 stars, 3 s | |
-| FOV 60, G < 8.5 | 16,274 stars, 2 s | |
-| FOV 60, G < 9 | timed out (28 s); 22 s near the Galactic centre | |
-| FOV 45, G < 10 | timed out | |
-| FOV 30, G < 12 | timed out | timed out even at FOV ~7 |
-
-So a field wider than one piece with Maximum Magnitude **8.5 or less** is sent as one
-magnitude-index query (not split if it times out).
-
-A wider field with a deeper limit, one that would need more than 64 pieces, goes to GAVO's
-**asynchronous** service (`dc.g-vo.org/tap/async`) as one job: no 20 s limit (jobs may run two
-hours), and it allows the page to read its answers, as the quick endpoint does. The page creates
-the job (GAVO redirects to it; the job's document names it), starts it, checks its phase every
-3 s, downloads the CSV, and deletes the job whatever happens. It gives up after 15 minutes. A
-progress bar and clock show it working. Measured on 2026-11-07, centred on Orion:
-
-| Field | Async job | Stars | In the page (Chromium) |
+| Field | Job | Stars | Plotted (Chromium) |
 |---|---|---|---|
-| FOV 45, G < 10 | 112 s (224 s on a second run, from the page itself) | 44,735 (4.3 MB) | 27,503 plotted, < 1 s; HR diagram 0.9 s |
-| FOV 30, G < 12 | 279 s | 120,593 (11.8 MB) | 70,054 plotted, 0.9 s; HR diagram 1.0 s |
+| FOV 45, G < 10 | 112–224 s | 44,735 (4.3 MB) | 27,503, < 1 s; matches ESA |
+| FOV 30, G < 12 | 279 s | 120,593 (11.8 MB) | 70,054, 0.9 s |
 
-The 45/10 field from the page matched an ESA download exactly (27,503 plotted). If a job fails,
-the page explains and opens the ESA download.
+**ESA downloads stop at 50,000 stars** unless logged in (marked `OVERFLOW` in VOTable, unmarked in
+CSV). Uploads with exactly 50,000 stars or `OVERFLOW` are refused as incomplete.
 
-**ESA downloads stop at 50,000 stars** for users who aren't logged in. FOV 30, G < 12 came back
-as exactly 50,000 of about 120,000, marked `OVERFLOW` in a VOTable but with no sign in CSV;
-asking for more ran 16 minutes and was aborted with 106,497 rows. So an uploaded file with
-exactly 50,000 stars, or a VOTable marked `OVERFLOW`, is refused as incomplete. Otherwise the
-50 MB upload limit matches the 300,000-star limit (~50 MB of CSV, ~30 MB VOTable, ~23 MB FITS).
+### Downloads
 
-## Downloads
-
-| Button | File | Contents |
+| Button | Example file | Contents |
 |---|---|---|
-| Download picture (PNG) | `M13.png` | The star field as currently stretched by the sliders; PNG text fields record the field, the exact slider positions, the data source and the credits |
-| Download star data (CSV) | `M13_FOV0.2_G16_GAVO_2026-11-03_stars.csv` | The field's Gaia rows exactly as used, after any reassembly and trimming, in ESA's `gaiadr3.gaia_source` columns (`ra, dec, parallax, phot_g_mean_mag, bp_rp, pmra, pmdec`) |
+| Download picture (PNG) | `M13.png` | Field as stretched; PNG text fields hold the field, slider positions, source and credits |
+| Download star data (CSV) | `M13_FOV0.2_G16_GAVO_2026-11-03_stars.csv` | The Gaia rows used, in ESA's columns (`ra, dec, parallax, phot_g_mean_mag, bp_rp, pmra, pmdec`) |
 | Download HR diagram (PNG) | `M13_HR_Absolute.png` | The diagram shown |
-| Download HR points (CSV) | `M13_HR_Absolute_points.csv` | One row per star in the picture: catalog (Gaia DR3 or HYG), position, parallax, apparent and absolute magnitude, color index, the plotted x and y, and `drawn` |
+| Download HR points (CSV) | `M13_HR_Absolute_points.csv` | One row per star: catalog, position, parallax, magnitudes, colour, plotted x/y, `drawn` |
 
-- **Re-uploadable star data.** The upload box reads the star-data file back unchanged and
-  reproduces the same count, picture and HR points (tested), so a student can submit the exact
-  data behind a diagram, or redo the work offline.
-- **Picture settings travel with the data.** The star-data file records the sliders' exact positions (`# Display sliders: colsat=…; gamma=…; mini=…; maxi=… (shown as …)`). Uploading it again sets the sliders back, so the picture matches pixel for pixel (tested); Reset still returns to the standard starting positions. Malformed or edited lines are ignored.
-- **The field travels with the data.** All four downloads record the five form inputs under the form's own labels (`Field: Object Catalog Name=M13; Right Ascension (RA)=…; Declination (Dec)=…; Field of View (FOV)=0.2; Maximum Magnitude=16`; separate text fields in the PNGs). Uploading a star-data file fills in the form from it, so the file is shown as saved whatever the form held (e.g. a grader who has typed nothing). Invalid records are ignored.
-- **Provenance and credit in the file.** Both CSVs start with `#` comment lines: the field, the
-  data source and date, and the credits below. The upload reader skips `#` lines.
-- **`drawn`** comes from the diagram's own point sizes, so the drawn rows are exactly the diagram's
-  points. As in the desktop app, the first star, the faintest star (size 0) and, in Absolute mode,
-  the brightest star are not drawn.
-- **HYG rows** use V and B−V (Gaia rows use G and BP−RP), as the desktop app mixes them; their
-  parallax is blank.
-- **HR points follow the diagram on screen**, not the menu: changing Apparent/Absolute without
-  redrawing still downloads the points of the diagram shown.
+- All four record the form inputs (`Field: Object Catalog Name=M13; …`); the CSVs also start with
+  `#` lines for the source, date and credits.
+- Uploading the star-data file reproduces the count, picture and HR points (tested), restores the
+  form and the slider positions (`# Display sliders: …`). Invalid lines are ignored.
+- `drawn` follows the diagram's point sizes: as in the desktop app, the first star, the faintest
+  (size 0) and, in Absolute mode, the brightest are not drawn.
+- HYG rows use V and B−V (Gaia rows G and BP−RP), as the desktop app does; their parallax is blank.
+- HR points are those of the diagram shown, even if the Apparent/Absolute menu has changed since.
 
-## Data credits
+### Will star counts match last year's?
 
-The page footer, the text beside the download buttons, and every CSV carry these credits (also in
-the README's "Data and credits"):
-
-- **Gaia DR3:** ESA/Gaia/DPAC, [CC BY-NC 3.0 IGO](https://www.cosmos.esa.int/web/gaia-users/license),
-  with ESA's acknowledgement sentence and the two papers ESA asks to be cited (Gaia Collaboration
-  2016, A&A 595, A1; 2023, A&A 674, A1).
-- **HYG database v3:** David Nash, CC BY-SA 2.5. The site redistributes a subset of it
-  (`data/bright_stars.npy`, built from `csv/hygdata_v3.csv`), which remains under CC BY-SA 2.5.
-- **GAVO** for serving the live data.
-
-Classroom use fits the non-commercial Gaia licence. The credit text lives in
-`web/showclusters.py` (`GAIA_CREDIT`, `HYG_CREDIT`, `GAVO_CREDIT`) and `web/index.html`.
-
-## Will star counts match last year's?
-
-**They should, for the same inputs.** We checked:
+Yes, for the same inputs:
 
 | Check | Result |
 |---|---|
-| Port vs original `ass.py` on identical Gaia data (M13, 0.2°, mag 16) | Identical: 1,369 stars, brightest 11.36, same picture and HR points |
-| Port vs original `ass.py` on identical Gaia data (Orion, 60°, mag 7, centred on Alnilam) | Identical stars, picture and HR points |
-| GAVO vs ESA, Orion, 60°, mag 7 | Identical: 3,259 rows |
-| GAVO vs ESA, M13, 0.2°, mag 16 | Identical: 1,498 rows → 1,369 plotted |
-| GAVO vs ESA, M13, 0.2°, mag 18 (HW #7 Problem 1) | Identical: 6,771 rows → 4,588 plotted, brightest 11.36 |
-| GAVO vs ESA, M13, 0.3°, mag 16 (the page's defaults) | Identical: 1,609 rows → 1,472 plotted, brightest 10.34 |
-| GAVO vs ESA, M44, 1.5°, mag 18 (HW #7 Problem 2) | Not yet compared: ESA's archive returned HTTP 500 on every attempt (2026-11-02). GAVO gives 3,893 plotted |
-| Gaia DR3 itself | Frozen since its June 2022 release, so ESA answers the same as last year |
+| Port vs `ass.py`, same data: M13 0.2°/16; Orion 60°/7 | Identical stars, picture, HR points |
+| GAVO vs ESA: Orion 60°/7; M13 0.2°/16, 0.2°/18 (HW #7 P1), 0.3°/16 | Identical rows |
+| GAVO vs ESA: M44 1.5°/18 (HW #7 P2) | Not compared (ESA HTTP 500, 2026-11-02); GAVO gives 3,893 plotted |
+| Gaia DR3 | Frozen since June 2022 |
 
-Small differences are still possible in these cases:
-
-- **Different inputs.** The count depends on FOV, maximum magnitude and the centre. Both
-  versions query with RA/Dec rounded to whole seconds as shown in the boxes; typing in those
-  boxes moves the centre. Last year, a student who skipped Enter got RA = Dec = 0.
-- **Stars exactly on an edge.** A star within a rounding error of the picture's edge or the
-  query radius can fall either way. The desktop app's numpy 1.26 and the browser's numpy
-  2.2 round some float32 arithmetic differently, and saved or uploaded files are cut to the
-  field by the page rather than by ESA's server. This affects at most a star or two, and
-  none in the fields we tested.
-- **GAVO's copy.** It is a re-hosted copy of Gaia DR3 and matched ESA exactly in every
-  field we compared, but it is a separate service.
-- **HR diagrams after repeated clicks.** Not a count difference: last year's app changed
-  its stored data each time "HR Diagram" was clicked in Absolute mode, so a student who
-  clicked several times could have a slightly different diagram than a first click gives.
+Possible small differences: different inputs (RA/Dec are rounded to whole seconds as shown; last
+year, skipping Enter gave RA = Dec = 0); a star or two on an edge (numpy 1.26 vs 2.2 float32
+rounding; saved and uploaded files are cut by the page); and repeated Absolute clicks in last
+year's app.
 
 ## HR diagram of your own image
 
-**Live page:** https://princetonuniversity.github.io/StackImages/HRDiagram/
-
-The page does what these desktop buttons do, in the same order as the StackImages window:
-
-| Desktop (StackImages window) | `ass.py` | Page | Port (`web/hrimage.py`) |
-|---|---|---|---|
-| Open an RGB fits file: **Select** | `get_RGB_image` → `show_stacked_image` → `slidershow` | 1. choose a FITS file; 2. the picture and its sliders | `read_rgb_fits`, `slidershow_input` + `showclusters.display_base`, `web/stretch.js` |
-| Brightest star (mag), Faintest star (mag) | `mag0`, `mag1` (empty → 10 and 20) | the same two boxes | `parse_magnitude` |
-| **HR diagram** | `GUI_HRdiag` → `makeHRdiag_new(..., shape='auto', fignum=1, thresh=1e-5)` → `findstars`, `fwhm` | **HR diagram** | `measure` (→ `findstars`, `fwhm`), `plot_points`, `hr_figure` |
-| **Color Diagram** | `GUI_ColorDiag` → the same, `fignum=6` | **Color Diagram** | `color_figure` |
-
-Files: `web/hrdiagram/` (the page: `index.html`, `app.js`, `worker.js`), `web/hrimage.py`, and the
-shared `web/stretch.js` (slidershow's stretch, also used by Show Clusters), `web/style.css` and
-`web/showclusters.py` (`display_base`). The site build puts them in `HRDiagram/`. The page uses
-Show Clusters' copy of Pyodide (`../ShowClusters/vendor/`), plus scipy for `convolve2d`.
-
-**Equivalence test.** `tests/desktop/test_hr_equivalence.py` runs Bob's unmodified
-`get_RGB_image`, `GUI_HRdiag` and `GUI_ColorDiag` in the desktop container, replacing only the wx
-widgets, the file dialog and the plot window, on synthetic star clusters (`tests/web/hrfixtures.py`:
-stars of several widths, hot pixels, extreme colors). The port must give the **identical** image
-array, name and picture input, and identical plotted points (positions, sizes, face and edge
-colors), axis limits, titles and labels, for both diagrams and several magnitude settings. In
-the browser, `tests/web/test_hr_browser.py` checks that Pyodide's plotted points match the native
-port's.
-
-### What the port does differently (and why the points are still the same)
-
-The arithmetic follows `ass.py` statement by statement, with the same dtypes. Only memory and
-skipped work differ. Run unchanged, `makeHRdiag_new` peaks at about 5.5 GB for a 19-megapixel
-image, above a browser tab's 4 GB limit; the port peaks at about 1.7 GB:
-
-- `findstars` computes one filter at a time, applies its test, and frees it, instead of holding
-  18 full-size arrays. The eight neighbour filters (M1–M8) are only tested for ≥ 0, so they are
-  written as the equivalent neighbour comparisons. Filters it never uses (M9–M12, M21, M22) are
-  skipped.
-- FWHM is measured only at candidate stars, in the same order, instead of looping over every pixel.
-- The `shape='auto'` cluster mask is not computed: `ass.py` computes it but never applies it
-  (`k = k&mask` is commented out).
-- Detection and photometry don't depend on the magnitude boxes, so they run once per image;
-  changing the magnitudes, or switching to the Color Diagram, redraws from the stored
-  measurements. The desktop app recomputes everything on each click, with the same result.
-
-### Deliberate differences from the desktop app
-
-| Desktop app | Web page | Why |
+| Desktop button | `ass.py` | `web/hrimage.py` |
 |---|---|---|
-| Picture at full resolution | Averaged down to at most 1600 px on its longest side; the slider ranges and starting positions come from the full image | Browser memory and drawing speed; the diagrams always use every pixel |
-| Pixel info, star info, FWHM, Astrometric Analysis, Deconvolve, Unsharp Mask, stacking | Not included | Not needed for the HR and color diagrams |
-| Writes `txt/color_mag.txt` | **Download points (CSV)**: every plotted star's position, fluxes, color and magnitude | Browser equivalent, with more detail |
-| "Save" in the plot window | **Download diagram (PNG)** | Browser equivalent |
-| No checks on the file | Files over 250 MB or 20 megapixels, non-FITS files, images with NaN/infinite pixels and impossible magnitudes are refused with an explanation | `ass.py` would crash or plot nothing |
+| Open an RGB fits file | `get_RGB_image` → `show_stacked_image` → `slidershow` | `read_rgb_fits`, `slidershow_input` + `display_base`, `stretch.js` |
+| Brightest / Faintest star (mag) | `mag0`, `mag1` (empty → 10, 20) | `parse_magnitude` |
+| HR diagram | `GUI_HRdiag` → `makeHRdiag_new(..., shape='auto', fignum=1, thresh=1e-5)` → `findstars`, `fwhm` | `measure`, `plot_points`, `hr_figure` |
+| Color Diagram | `GUI_ColorDiag` (`fignum=6`) | `color_figure` |
 
-### Kept exactly as in `ass.py`
+The page (`web/hrdiagram/`) uses Show Clusters' Pyodide (`../ShowClusters/vendor/`) plus scipy.
 
-These look like slips in `ass.py`. They are reproduced on purpose so the page matches the desktop
-app, and are filed as issues for Bob. If one is fixed in `ass.py`, change `web/hrimage.py` and
-`tests/desktop/test_hr_equivalence.py` with it.
+**Equivalence test.** `tests/desktop/test_hr_equivalence.py` runs Bob's unmodified functions,
+replacing only wx, the file dialog and the plot window, on synthetic clusters
+(`tests/web/hrfixtures.py`). The port must give identical image arrays, plotted points, axes and
+labels for both diagrams. `tests/web/test_hr_browser.py` checks Pyodide against the native port.
 
-- The color filter `abs(log(G/B) > 2)` takes the absolute value of the comparison, so it drops
-  stars with G/B > e² but not G/B < e⁻² (the R/G test is a true `|log(R/G)| > 2`).
-  ([#21](https://github.com/PrincetonUniversity/StackImages/issues/21))
-- The `shape='auto'` cluster mask is computed but not applied (see above).
-  ([#22](https://github.com/PrincetonUniversity/StackImages/issues/22))
-- The Color Diagram's upper axis limits are padded using the already-padded lower limits.
-  ([#24](https://github.com/PrincetonUniversity/StackImages/issues/24))
+**Memory.** The arithmetic follows `ass.py` statement by statement. `makeHRdiag_new` peaks at
+~5.5 GB on a 19-megapixel image (a tab allows 4 GB); the port peaks at ~1.7 GB because it:
 
-Two more issues found while porting don't affect the page: `fig5axes` is never set when `GUI` is
-False ([#23](https://github.com/PrincetonUniversity/StackImages/issues/23); the equivalence test
-supplies the axes), and `ass.py`'s star imports only work at the pinned numpy and scipy versions
-([#25](https://github.com/PrincetonUniversity/StackImages/issues/25)).
+- computes `findstars`' filters one at a time, writes M1–M8 (only tested ≥ 0) as neighbour
+  comparisons, and skips the unused M9–M12, M21, M22;
+- measures FWHM only at candidate stars;
+- skips the `shape='auto'` mask, which `ass.py` computes but never applies;
+- detects and measures once per image, so changing magnitudes or diagrams just redraws.
 
-### Limits and timing
+**Differences from the desktop app.** The picture is averaged to ≤ 1600 px (diagrams use every
+pixel). Pixel/star info, FWHM, astrometry, deconvolution, unsharp mask and stacking are left out.
+**Download points (CSV)** replaces `txt/color_mag.txt`; **Download diagram (PNG)** replaces
+"Save". Files over 250 MB or 20 megapixels, non-FITS files, NaN/infinite pixels and impossible
+magnitudes are refused with a reason.
 
-Measured in Chromium on an Apple-silicon Mac with a synthetic 5,345 × 3,551 RGB image (217 MB,
-like a cropped M2 stack): opening it took 5 s, the first HR diagram 32 s, and each later diagram
-0.3 s. Most of the first diagram's time is `fwhm`, called once per candidate star exactly as
-`ass.py` does. The page refuses files over 250 MB or 20 megapixels; a smaller crop around the
-cluster is faster.
+**Kept on purpose**, filed for Bob; if one is fixed in `ass.py`, update `web/hrimage.py` and
+the equivalence test with it:
+
+- `abs(log(G/B) > 2)` drops G/B > e² but not G/B < e⁻² ([#21](https://github.com/PrincetonUniversity/StackImages/issues/21))
+- the `shape='auto'` mask is not applied ([#22](https://github.com/PrincetonUniversity/StackImages/issues/22))
+- the Color Diagram pads its upper limits from the padded lower ones ([#24](https://github.com/PrincetonUniversity/StackImages/issues/24))
+
+Not affecting the page: `fig5axes` unset when `GUI` is False
+([#23](https://github.com/PrincetonUniversity/StackImages/issues/23)); `ass.py`'s star imports need
+the pinned numpy and scipy ([#25](https://github.com/PrincetonUniversity/StackImages/issues/25)).
+
+**Timing** (Chromium, Apple silicon, 5,345 × 3,551 RGB, 217 MB): open 5 s, first diagram 32 s
+(mostly `fwhm`), later diagrams 0.3 s.
+
+## Data credits
+
+The page footer, the download area and every CSV carry the Gaia DR3 (ESA/Gaia/DPAC, CC BY-NC 3.0
+IGO, with ESA's acknowledgement and two citations), HYG v3 (David Nash, CC BY-SA 2.5; the site
+ships a subset as `data/bright_stars.npy`, under the same licence) and GAVO credits. Full text: the
+README's "Data and credits"; in code, `GAIA_CREDIT`, `HYG_CREDIT`, `GAVO_CREDIT` in
+`web/showclusters.py` and `web/index.html`. Classroom use fits the non-commercial Gaia licence.
 
 ## Workflows
 
 | Workflow | Runs on | Does |
 |---|---|---|
-| `ci.yml` (desktop) | push/PR to `main`, except web-only files and Markdown; manual | Desktop GUI tests under Xvfb, equivalence test, packaging tests in `ci/desktop-tests.Dockerfile`; builds `PyWin.tar`; on `main`, publishes release `v<ass.py version>.<n>` when the bundle's app/data files changed (`scripts/next_release.py`) |
-| `pages.yml` (web) | push/PR touching the web files (not Markdown); manual | eslint + tsc (Node container), ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`), verified Pyodide download, site build with the latest snapshots, `StackImages-web.zip` of the site and `HRDiagram-web.zip` of the HR page; stamps the site's version (`scripts/web_version.py`); on a PR that changes the site, requires its `docs/CHANGELOG.md` entry; deploys on `main`, then publishes a new version as a `web-1.N` release with both zips |
-| `snapshots.yml` | manual only | Fetches ~75 clusters (`scripts/build_snapshots.py`: GAVO in pieces, ESA as fallback, lower magnitude limit if both fail), validates, publishes a `snapshots-*` release, redeploys the page. Resumes from the last release; re-run to fill gaps |
+| `ci.yml` | push/PR to `main` except web-only and Markdown files; manual | Desktop GUI, equivalence and packaging tests (`ci/desktop-tests.Dockerfile`, Xvfb); builds `PyWin.tar`; on `main`, releases `v<ass.py version>.<n>` if the bundle's app/data changed (`scripts/next_release.py`) |
+| `pages.yml` | push/PR touching web files; manual | eslint + tsc; ruff + mypy and all web tests incl. Chromium (`ci/web-tools.Dockerfile`); verified Pyodide; site build with latest snapshots; both zips; version stamp; deploy and `web-1.N` release on `main` |
+| `snapshots.yml` | manual | Fetches ~75 clusters (GAVO in pieces, ESA fallback, lower limit if both fail), validates, releases `snapshots-*`, redeploys. Resumes; re-run to fill gaps |
 
-Documentation-only changes (`README.md`, anything under `docs/`, any other `.md` file) start no
-workflow: there is nothing to test, deploy or release. The README inside `PyWin.tar` is refreshed
-by the next desktop release, and README/LICENSE edits alone never make one. To redeploy or release
-anyway, run the workflow manually (Actions → Run workflow).
+Markdown-only changes start no workflow; the README in `PyWin.tar` refreshes with the next desktop
+release. To redeploy anyway, run the workflow manually. Nothing generated is committed: Pyodide
+(`build/vendor/`), the site (`_site/`) and snapshots (`build/snapshots/`) are gitignored.
 
-Nothing generated is committed: Pyodide (`build/vendor/`), the site (`_site/`) and
-snapshots (`build/snapshots/`) are gitignored and rebuilt or downloaded by the workflows.
+## Local development
 
-## Working on it locally
-
-Everything runs in containers (`compose.yaml`), so only Docker is needed:
+Only Docker is needed (`compose.yaml`):
 
 ```bash
 docker-compose build web-tools
 docker-compose run --rm web-tools python scripts/vendor_pyodide.py   # once; cached in build/vendor
-docker-compose run --rm web-tools                                     # all web tests (unit + Chromium)
+docker-compose run --rm web-tools                                     # web tests (unit + Chromium)
 docker-compose run --rm lint-js sh -c "npm ci && npm run check"       # eslint + tsc
 docker-compose run --rm desktop-tests                                 # desktop + equivalence tests
 scripts/run_web.sh                                                    # build and serve on :8000
-```
 
-Saved copies for a few clusters, for trying the fallback locally:
-
-```bash
+# saved copies, to try the fallback
 docker-compose run --rm web-tools python scripts/build_snapshots.py --only M13 M44 --source gavo
 scripts/run_web.sh --snapshots build/snapshots
 ```
 
-Without Docker, a `.venv` works too: `uv venv --python 3.13 .venv && uv pip install
---python .venv/bin/python -r requirements-web.lock`, then the same `python …` commands.
+Without Docker: `uv venv --python 3.13 .venv && uv pip install --python .venv/bin/python -r requirements-web.lock`.
 
 ## Versions
 
-The site (home page, Show Clusters, HR Diagram of Your Own Image) has one version number,
-**web 1.N**, shown at the bottom of every page as "Version 1.4 (2026-11-07)" with a link to
-[CHANGELOG.md](CHANGELOG.md). `scripts/web_version.py` decides and stamps it in `pages.yml`:
+The whole site has one number, **web 1.N**, shown on every page ("Version 1.4 (2026-11-07)")
+with a link to [CHANGELOG.md](CHANGELOG.md). In `pages.yml`, `scripts/web_version.py`:
 
-1. After the site is built and zipped, `zip_site.py --fingerprint` hashes the site's contents,
-   leaving out the build time and the version stamp (`version.js`).
-2. If that hash is the one recorded in the newest `web-1.N` release, the site is unchanged and
-   keeps its number and date (a redeploy makes no release). Otherwise it is the next number,
-   dated today. The first number comes from `web/VERSION`; raising it starts again at `.0`.
-3. The number is written into `version.js` in each page folder (an unstamped local build says
-   "Development build"), and the site is zipped again.
-4. On a pull request that changes the site, CI fails until `docs/CHANGELOG.md` has a
-   `## 1.N (date)` entry for the number it names. On `main`, a new version is deployed and then
-   published as release `web-1.N` with both zips, that entry as its notes, and the fingerprint.
-   A redeploy after new snapshots (`snapshots.yml`) also changes the site; it is released with a
-   note naming the snapshots if no entry was written.
+1. hashes the built site (`zip_site.py --fingerprint`, excluding build time and `version.js`);
+2. keeps the newest `web-1.N` number and date if the hash matches, otherwise takes the next
+   number, dated today (the major number comes from `web/VERSION`; raising it restarts at `.0`);
+3. writes `version.js` into each page folder (unstamped builds say "Development build") and
+   re-zips.
 
-Before 1.0 (2026-11-07), releases were dated: `web-YYYYMMDD-HHMM` and `hrdiagram-YYYYMMDD-HHMM`.
+A PR that changes the site fails until `docs/CHANGELOG.md` has a `## 1.N (date)` entry for the
+number CI names. On `main`, the new version is deployed and released as `web-1.N` with both zips
+and that entry as notes; a snapshot-only redeploy without an entry gets a note naming the
+snapshots. Before 1.0, releases were `web-YYYYMMDD-HHMM` and `hrdiagram-YYYYMMDD-HHMM`.
 
 ## Hosting a copy elsewhere
 
-Every deploy also publishes the whole site as one zip:
-https://princetonuniversity.github.io/StackImages/StackImages-web.zip
-(`scripts/zip_site.py`, run by `pages.yml` after the site build). Each version is also
-kept as a `web-1.N` release (below), never marked Latest. Unzipped, it is a
-`StackImages/` folder: the home page, `ShowClusters/` with Pyodide and the saved
-snapshots, `HRDiagram/`, and `HOSTING.txt` with these instructions. Copy the folder unchanged into
-any directory of a static web site. All links are relative, so it works from a
-subdirectory such as `/~rvdb/StackImages/`.
+`StackImages-web.zip` (site root; `scripts/zip_site.py`) unzips to a `StackImages/` folder with
+the home page, `ShowClusters/` (Pyodide and snapshots), `HRDiagram/` and `HOSTING.txt`.
+`HRDiagram-web.zip` holds the HR page alone. Copy the folder unchanged anywhere on a static site;
+links are relative, so `/~rvdb/StackImages/` works.
 
-No server settings are needed. Many hosts send `application/octet-stream` for
-extensions they don't know. Browsers refuse that type for JavaScript modules
-(`.mjs`), so the page loads Pyodide differently:
+No server settings are needed, even where unknown extensions are served as
+`application/octet-stream`:
 
-- **The worker is a classic one.** It loads `pyodide.js` with `importScripts`, and
-  every host types `.js` correctly. `pyodide.mjs` isn't shipped.
-- **`.wasm` compiles from its bytes** when it doesn't arrive as `application/wasm`.
-  Pyodide would otherwise stall on it.
-- **The data files are fetched as plain bytes**, so `.whl`, `.npy`, `.csv` and `.json`
-  work with any content type.
+- the worker is classic and loads `pyodide.js` with `importScripts` (no `.mjs`);
+- `.wasm` is compiled from bytes if not served as `application/wasm`;
+- data files (`.whl`, `.npy`, `.csv`, `.json`) are fetched as bytes;
+- the HR diagram is shown through a `data:` URL, which strict CSPs allow where `blob:` is blocked.
 
-`test_site_zip.py` serves the unzipped copy the way vanderbei.princeton.edu does,
-using its headers saved in `tests/web/fixtures/personal_site_headers.json`:
-
-- `nosniff` and its Content-Security-Policy;
-- the content types from its upload map;
-- `application/octet-stream` for anything unmapped.
-
-Its CSP permits `data:` images but not `blob:` ones, so the HR diagram is shown
-through a `data:` URL.
-
-On vanderbei.princeton.edu this holds both on the current nginx VM and on the coming
-Azure Blob storage. The new extensions (`.wasm`, `.whl`, `.npy`) only need the
-vanderbei-deploy step for any new file type: `tools/gen-mime-map.sh` records whatever
-nginx serves for them, so the autosync to Blob and the cutover parity check include
-them.
+`test_site_zip.py` serves the unzipped copy with vanderbei.princeton.edu's headers
+(`tests/web/fixtures/personal_site_headers.json`: `nosniff`, its CSP, its type map,
+`octet-stream` otherwise). This holds on its nginx VM and on the coming Azure Blob storage; the
+new extensions only need vanderbei-deploy's `tools/gen-mime-map.sh` run so the Blob sync and
+cutover parity check include them.
 
 ## Limits and safeguards
 
-- Inputs are validated before any query: object names must look like `m13`, `ngc5466` or
-  `ic4665`; RA/Dec, FOV and magnitude must be in range. Queries are built from numbers only.
-- Uploads: at most 50 MB and 300,000 stars, with the required Gaia columns; ESA results cut off
-  at 50,000 stars (or marked `OVERFLOW`) are refused as incomplete; anything else is
-  rejected with a message naming the problem. A file centred on a different object is
-  rejected or flagged.
-- The only outside service Show Clusters contacts is GAVO (its quick and asynchronous TAP
-  endpoints); the browser tests enforce this. The page only follows async jobs on GAVO's own job
-  list, named by an ID of letters, digits, `-` and `_`.
-- HR Diagram of Your Own Image contacts no outside service, and the student's image never
-  leaves the browser. It refuses files over 250 MB or 20 megapixels, non-FITS files, images with
-  NaN or infinite pixels, and impossible magnitudes, with a message naming the problem.
+- Inputs are validated before any query (names like `m13`, `ngc5466`, `ic4665`; RA/Dec, FOV and
+  magnitude in range); queries are built from numbers only.
+- Uploads: ≤ 50 MB and 300,000 stars with the required Gaia columns; truncated ESA files are
+  refused; a file centred elsewhere is rejected or flagged.
+- Show Clusters contacts only GAVO (sync and async TAP; enforced by the browser tests) and follows
+  only job IDs on GAVO's own job list (letters, digits, `-`, `_`).
+- HR Diagram contacts nothing; the image never leaves the browser.
 - Pyodide and every wheel are checked against pinned SHA-256 hashes at build time.
 
 ## Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
-| "The live Gaia data source is unavailable…" | GAVO is down or slow. Saved copies cover common clusters; otherwise use an ESA file (bottom of the page). |
-| "This field has too many stars for the live data source…" | A wide or Milky-Way-dense field even GAVO's smallest pieces can't answer in time. Lower the FOV or Maximum Magnitude, or use an ESA file. |
-| "Gaia is preparing the stars for this wide field…" | A wide field with a deep limit (e.g. FOV 45, magnitude 10) is one GAVO async job; it takes a few minutes. Keep the tab open. |
-| "The live data source couldn't prepare this wide field…" | The async job failed or took over 15 minutes. Try again, or download from the ESA Gaia archive (no more than 50,000 stars unless logged in). |
-| "…exactly 50,000 stars…" / "…marked this file as incomplete…" | ESA cut the download off. Click Show Stars to get the field live instead, or use a smaller field or magnitude limit. |
-| Page stuck on "Loading Python…" | First visit downloads ~35 MB. On failure, "Reload tool" appears with details. |
-| "The Python worker stopped" | Browser ran out of memory; use a smaller field or magnitude limit. |
-| `pages.yml` warns "No snapshots-* release yet" | Run `snapshots.yml` once (Actions → Snapshots → Run workflow). |
-| `ci.yml` fails in `test_web_equivalence.py` | `ass.py` and the port disagree; see "When Bob sends a new `ass.py`". |
+| "The live Gaia data source is unavailable…" | GAVO down or slow. Saved copies cover common clusters; otherwise use an ESA file. |
+| "This field has too many stars for the live data source…" | Even the smallest pieces time out. Lower FOV or magnitude, or use an ESA file. |
+| "Gaia is preparing the stars for this wide field…" | An async job; a few minutes. Keep the tab open. |
+| "The live data source couldn't prepare this wide field…" | Job failed or passed 15 minutes. Retry, or use ESA (≤ 50,000 stars unless logged in). |
+| "…exactly 50,000 stars…" / "…marked this file as incomplete…" | ESA cut the file off. Use Show Stars, or a smaller field or limit. |
+| Stuck on "Loading Python…" | First visit downloads ~35 MB; on failure "Reload tool" shows details. |
+| "The Python worker stopped" | Out of memory; smaller field or limit. |
+| `pages.yml`: "No snapshots-* release yet" | Run `snapshots.yml` once. |
+| `ci.yml` fails `test_web_equivalence.py` | `ass.py` changed; see "When Bob sends a new `ass.py`". |

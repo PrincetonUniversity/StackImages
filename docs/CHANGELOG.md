@@ -1,13 +1,10 @@
 # Changelog: StackImages web pages
 
-The web pages at <https://princetonuniversity.github.io/StackImages/>: Show Clusters and HR
-Diagram of Your Own Image. Each version is shown at the bottom of every page ("Version 1.0
-(2026-11-07)") and published as a `web-1.N` release with the site as a zip.
-
-How versions work: each deploy that changes the site gets the next number (1.0, 1.1, …).
-Add an entry here, under the number CI names in the pull request, in words a student would
-follow; the release notes are this entry. Raise the first number in `web/VERSION` for a
-milestone (2.0 starts again at .0). The desktop app has its own versions (v21.0, …).
+Versions of <https://princetonuniversity.github.io/StackImages/>, shown at the bottom of every
+page and released as `web-1.N`. Each deploy that changes the site gets the next number; add an
+entry under the number CI names in the pull request, in words a student would follow (it becomes
+the release notes). Raise the major number in `web/VERSION` for a milestone. See
+[WEB.md](WEB.md#versions).
 
 ## 1.0 (2026-11-07)
 
