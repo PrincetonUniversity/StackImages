@@ -228,7 +228,7 @@ README's "Data and credits"; in code, `GAIA_CREDIT`, `HYG_CREDIT`, `GAVO_CREDIT`
 | `snapshots.yml` | manual | Fetches ~75 clusters (GAVO in pieces, ESA fallback, lower limit if both fail), validates, releases `snapshots-*`, redeploys. Resumes; re-run to fill gaps |
 
 `install-commands.yml` runs the README's download and update commands on Windows (cmd.exe) and
-macOS (zsh) runners against the latest release's `PyWin.tar` on README changes, weekly, or on demand.
+macOS (zsh) runners against the latest release's `PyWin.tar` on README changes or on demand.
 Otherwise Markdown-only changes start no workflow; the README in `PyWin.tar` refreshes with the
 next desktop release. To redeploy anyway, run the workflow manually. Nothing generated is committed: Pyodide
 (`build/vendor/`), the site (`_site/`) and snapshots (`build/snapshots/`) are gitignored.
