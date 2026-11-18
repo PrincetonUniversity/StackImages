@@ -80,10 +80,14 @@ def command(text: str, platform: str, kind: str) -> str:
 def run_in_shell(platform: str, cmd: str) -> None:
     """Run cmd in the shell students paste into; raise CheckError on a non-zero exit."""
     if platform == "windows":
+        # Windows' own tar.exe and curl.exe first, as in Anaconda Prompt: a runner's Git Bash
+        # puts GNU tar ahead of them, which reads "C:" as a remote host.
+        system32 = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
+        env = {**os.environ, "PATH": f"{system32};{os.environ.get('PATH', '')}"}
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "step.cmd"
-            script.write_text(f"{cmd}\r\nexit /b %errorlevel%\r\n", encoding="utf-8")
-            result = subprocess.run(["cmd", "/d", "/c", str(script)], check=False)
+            script.write_text(f"where tar curl\r\n{cmd}\r\nexit /b %errorlevel%\r\n", encoding="utf-8")
+            result = subprocess.run(["cmd", "/d", "/c", str(script)], check=False, env=env)
     else:
         result = subprocess.run(["/bin/zsh", "-c", cmd], check=False)
     if result.returncode != 0:
