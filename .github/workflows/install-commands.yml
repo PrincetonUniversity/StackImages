@@ -4,7 +4,6 @@ name: Install commands
 # Prompt) and macOS (zsh) runners against the latest release's PyWin.tar, then checks every file
 # (scripts/readme_install.py). The commands are read from README.md, so a README change
 # starts this workflow even though Markdown alone starts neither ci.yml nor pages.yml.
-# Weekly too, because the runner images (and a new release) change without a commit here.
 on:
   push:
     branches: [main]
@@ -20,8 +19,6 @@ on:
       - "scripts/readme_install.py"
       - "tests/packaging/test_readme_install.py"
       - ".github/workflows/install-commands.yml"
-  schedule:
-    - cron: "17 12 * * 1"  # Mondays 12:17 UTC
   workflow_dispatch:
 
 permissions:

@@ -143,7 +143,7 @@ Desktop releases
 - `environment.yml` and `ci/conda-linux-64.lock` define the CI environment; regenerate the lock
   with `scripts/lock_conda_env.sh`.
 - `install-commands.yml` runs this README's download and update commands on Windows and macOS
-  runners (`scripts/readme_install.py`) when the README changes and weekly. Other Markdown-only
+  runners (`scripts/readme_install.py`) when the README changes. Other Markdown-only
   changes start no workflow.
 
 Data and credits
