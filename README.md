@@ -13,7 +13,7 @@ Paste each command into Terminal (Applications → Utilities).
 1. Download and extract StackImages:
 
    ```bash
-   curl -L https://vanderbei.princeton.edu/tmp/PyWin.tar -o $HOME/Downloads/StackImages.tar && mkdir -p $HOME/Downloads/StackImages && tar -xvf $HOME/Downloads/StackImages.tar --directory=$HOME/Downloads/StackImages --strip-components=1 PyWin
+   curl -fL https://github.com/PrincetonUniversity/StackImages/releases/latest/download/PyWin.tar -o $HOME/Downloads/StackImages.tar && mkdir -p $HOME/Downloads/StackImages && tar -xvf $HOME/Downloads/StackImages.tar --directory=$HOME/Downloads/StackImages --strip-components=1 PyWin
    ```
 
 2. Download and install Miniconda:
@@ -46,10 +46,10 @@ pythonw $HOME/Downloads/StackImages/GetFit.py
 pythonw $HOME/Downloads/StackImages/StackImages.py
 ```
 
-Update to the latest version on the server:
+Update to the latest release:
 
 ```bash
-curl -L https://vanderbei.princeton.edu/tmp/PyWin.tar -o $HOME/Downloads/StackImages.tar && tar -xvkf $HOME/Downloads/StackImages.tar --unlink -C $HOME/Downloads/StackImages --strip-components=1 --exclude='._*'
+curl -fL https://github.com/PrincetonUniversity/StackImages/releases/latest/download/PyWin.tar -o $HOME/Downloads/StackImages.tar && tar -xvkf $HOME/Downloads/StackImages.tar --unlink -C $HOME/Downloads/StackImages --strip-components=1 --exclude='._*'
 ```
 
 Windows
@@ -59,7 +59,7 @@ Windows
 2. Download and extract StackImages:
 
    ```bat
-   curl --noproxy "*" https://vanderbei.princeton.edu/tmp/PyWin.tar -o %USERPROFILE%\Downloads\StackImages.tar && IF NOT EXIST %USERPROFILE%\Downloads\StackImages mkdir %USERPROFILE%\Downloads\StackImages && tar -xvf %USERPROFILE%\Downloads\StackImages.tar --directory=%USERPROFILE%\Downloads\StackImages --strip-components=1 PyWin
+   curl -fL --noproxy "*" https://github.com/PrincetonUniversity/StackImages/releases/latest/download/PyWin.tar -o %USERPROFILE%\Downloads\StackImages.tar && IF NOT EXIST %USERPROFILE%\Downloads\StackImages mkdir %USERPROFILE%\Downloads\StackImages && tar -xvf %USERPROFILE%\Downloads\StackImages.tar --directory=%USERPROFILE%\Downloads\StackImages --strip-components=1 PyWin
    ```
 
 3. Accept the Terms of Service, set the channels (astropy, then conda-forge) and create the
@@ -81,10 +81,10 @@ pythonw %USERPROFILE%\Downloads\StackImages\GetFit.py
 pythonw %USERPROFILE%\Downloads\StackImages\StackImages.py
 ```
 
-Update to the latest version on the server:
+Update to the latest release:
 
 ```bat
-curl --noproxy "*" https://vanderbei.princeton.edu/tmp/PyWin.tar -o %USERPROFILE%\Downloads\StackImages.tar && tar -xvkf %USERPROFILE%\Downloads\StackImages.tar --unlink -C %USERPROFILE%\Downloads\StackImages --strip-components=1 --exclude=._*
+curl -fL --noproxy "*" https://github.com/PrincetonUniversity/StackImages/releases/latest/download/PyWin.tar -o %USERPROFILE%\Downloads\StackImages.tar && tar -xvkf %USERPROFILE%\Downloads\StackImages.tar --unlink -C %USERPROFILE%\Downloads\StackImages --strip-components=1 --exclude=._*
 ```
 
 Start over
@@ -142,7 +142,9 @@ Desktop releases
   in `PyWin.tar` changed. Run `ci.yml` manually on `main` to release on demand.
 - `environment.yml` and `ci/conda-linux-64.lock` define the CI environment; regenerate the lock
   with `scripts/lock_conda_env.sh`.
-- Markdown-only changes start no workflow.
+- `install-commands.yml` runs this README's download and update commands on Windows and macOS
+  runners (`scripts/readme_install.py`) when the README changes and weekly. Other Markdown-only
+  changes start no workflow.
 
 Data and credits
 ----------------
