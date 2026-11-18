@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import readme_install as ri  # noqa: E402
 
 README = (ROOT / "README.md").read_text(encoding="utf-8")
+URL = "https://github.com/PrincetonUniversity/StackImages/releases/latest/download/PyWin.tar"
 BUNDLE = {"StackImages.py": b"gui", "GetFit.py": b"getfit", "ass.py": b"science", "csv/a.csv": b"1,2"}
 
 
@@ -91,8 +92,9 @@ def bundle(tmp_path: Path) -> Path:
 def test_real_readme_has_one_line_download_and_update(platform: str) -> None:
     download = ri.command(README, platform, "download")
     update = ri.command(README, platform, "update")
-    assert "https://vanderbei.princeton.edu/tmp/PyWin.tar" in download
-    assert "https://vanderbei.princeton.edu/tmp/PyWin.tar" in update
+    for cmd in (download, update):
+        assert cmd.startswith("curl -fL ")  # -f: a 404 stops curl; -L: GitHub redirects the link
+        assert URL in cmd
     assert "--strip-components=1" in download and "--strip-components=1" in update
     assert download != update
 

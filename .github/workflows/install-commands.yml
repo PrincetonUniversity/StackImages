@@ -1,10 +1,10 @@
 name: Install commands
 
 # Runs the README's download and update commands on real Windows (cmd.exe, as in Anaconda
-# Prompt) and macOS (zsh) runners against the live PyWin.tar, then checks every file
+# Prompt) and macOS (zsh) runners against the latest release's PyWin.tar, then checks every file
 # (scripts/readme_install.py). The commands are read from README.md, so a README change
 # starts this workflow even though Markdown alone starts neither ci.yml nor pages.yml.
-# Weekly too, because the server's PyWin.tar and the runner images change without a commit.
+# Weekly too, because the runner images (and a new release) change without a commit here.
 on:
   push:
     branches: [main]
